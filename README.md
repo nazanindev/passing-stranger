@@ -30,3 +30,19 @@ Point it somewhere in `cams.yaml`. It opens on the mechanism, already running.
 YOLO finds the cars and follows them. It watches a few at a time — the one it's
 been staring at longest gets a story. The storyteller (`narrator.py`) is just
 word-lists and dice, seeded by the car so its soul never changes. No model, no key.
+
+One rule: invention goes wherever the evidence is silent, but never fights the
+evidence we have. A yellow car on a US cam reads as a cab, and a cab is never
+"going nowhere" — kinds with a visible destination (cab, mover, trucker, school
+bus…) get their own pools in `style.py`.
+
+## Later
+
+- **Surveillance framing** — foreground the apparatus next to the tenderness:
+  real cam id, "public feed", a running count of souls invented from public
+  cameras today. Pure UI pass, no pipeline changes. Stick to genuinely public
+  feeds (DOT, city, transit) — that openness *is* the commentary; no scraping
+  unsecured private cams.
+- **LLM narrator** — only if the deterministic path is truly exhausted, and only
+  a local open-weight model (ollama / llama.cpp). No frontier API on the hot
+  path. The dice stay as the default and the fallback.

@@ -41,7 +41,8 @@ class Narrator:
             chips.append(features["time_of_day"])
             return [c for c in chips if c]
         ft = (features.get("fine_type") or "").replace("_", " ")
-        chips = [f"a {ft or features['vehicle_type']}"]
+        label = ft or style.KIND_LABEL.get(kind) or features["vehicle_type"]
+        chips = [f"a {label}"]
         if features["color"] not in ("unknown", ""):
             chips.append(features["color"])
         chips.append({"big": "up close", "midsize": "mid-distance",
@@ -63,36 +64,44 @@ class Narrator:
 
         rng = random  # rolled once per car, then cached — stable while on screen
         kind = style.kind_of(features)
-        names = style.names_for(features.get("locale", "default"))
 
         if features["vehicle_type"] == "person":
             mood = features.get("mood", "ambling")
-            attrs = {"name": rng.choice(names),
-                     "who": rng.choice(style.PERSON_WHO),
+            attrs = {"who": rng.choice(style.PERSON_WHO),
                      "mood": rng.choice(style.PERSON_MOOD[mood]),
                      "toward": rng.choice(style.TOWARD)}
             lines = [rng.choice(style.PERSON_TEMPLATES).format(**attrs)]
             archetype = "The Passerby"
         elif kind in style.MULTI:
-            lines = rng.sample(style.BUS_LIVES, style.BUS_COUNT)  # situations, not names
+            pool = style.MULTI_LIVES.get(kind, style.BUS_LIVES)  # situations, not names
+            lines = rng.sample(pool, style.BUS_COUNT)
             archetype = {"transit": "The Manyfold", "kids": "The School Run"}.get(
                 kind, "The Busful")
         else:
             origin, _dest = style.GEOGRAPHY.get(features["direction"], style.GEOGRAPHY["_"])
             beh = features.get("behavior")
-            emotion = (rng.choice(style.BEHAVIOR_EMOTION[beh]) if beh in style.BEHAVIOR_EMOTION
-                       else _pick(rng, style.EMOTION, features["speed"]))
+            if kind in style.KIND_EMOTION:
+                # a kind with a visible telos: the job sets the feeling; behavior
+                # folds into speed so a hurrying cab is never "running from something"
+                key = style.BEH_TO_SPEED.get(beh, features["speed"])
+                emotion = _pick(rng, style.KIND_EMOTION[kind], key)
+            elif beh in style.BEHAVIOR_EMOTION:
+                emotion = rng.choice(style.BEHAVIOR_EMOTION[beh])
+            else:
+                emotion = _pick(rng, style.EMOTION, features["speed"])
+            purpose = (rng.choice(style.KIND_PURPOSE[kind]) if kind in style.KIND_PURPOSE
+                       else _pick(rng, style.PURPOSE, features["time_of_day"]))
             attrs = {
-                "name": rng.choice(names),
-                "age": rng.randint(19, 74),
                 "who": rng.choice(style.WHO[kind]),
                 "emotion": emotion,
-                "purpose": _pick(rng, style.PURPOSE, features["time_of_day"]),
-                "toward": rng.choice(style.TOWARD),
+                "purpose": purpose,
+                "toward": rng.choice(style.KIND_TOWARD.get(kind, style.TOWARD)),
                 "origin": origin,
             }
             lines = [rng.choice(style.TEMPLATES).format(**attrs)]
-            archetype = f"The {rng.choice(style.ARCH_ADJ)} {rng.choice(style.ARCH_NOUN)}"
+            archetype = (rng.choice(style.KIND_ARCHETYPE[kind])
+                         if kind in style.KIND_ARCHETYPE
+                         else f"The {rng.choice(style.ARCH_ADJ)} {rng.choice(style.ARCH_NOUN)}")
 
         result = {"lines": lines, "archetype": archetype, "kind": kind}
         self._cache[track_id] = result

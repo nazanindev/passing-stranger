@@ -16,6 +16,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+from . import style
+
 # COCO class ids for the things we care about.
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 SUBJECT_CLASSES = {0: "person", **VEHICLE_CLASSES}   # people get stories too
@@ -182,14 +184,19 @@ class Tracker:
             if tr.color == "unknown" and (x2 - x1) * (y2 - y1) > 1500:
                 tr.color = _dominant_color(frame, (x1, y1, x2, y2))
             # classify body-type once, only when the crop is big enough to be legible
+            # (0.02 ≈ a car filling a seventh of the frame edge-to-edge; below that
+            # ImageNet is dice, and dice is the narrator's job)
             if (self.cls is not None and tr.cls_name != "person" and not tr.fine_type
-                    and tr.rel_size > 0.03 and tr.frames_seen % 4 == 0
+                    and tr.rel_size > 0.02 and tr.frames_seen % 4 == 0
                     and (x2 - x1) >= 24 and (y2 - y1) >= 24):
                 crop = frame[max(0, y1):y2, max(0, x1):x2]
                 if crop.size:
                     pr = self.cls(crop, verbose=False, device=self.device)[0].probs
-                    if float(pr.top1conf) > 0.35:
-                        tr.fine_type = self.cls.names[int(pr.top1)]
+                    name_ = self.cls.names[int(pr.top1)]
+                    # keep only vehicle-ish reads we have opinions about — ImageNet
+                    # on small crops happily answers "container_ship" for a sedan
+                    if float(pr.top1conf) > 0.35 and name_ in style.FINE_KIND:
+                        tr.fine_type = name_
 
         # forget tracks that have been gone a while (keeps the dict bounded)
         for tid in list(self.tracks):
