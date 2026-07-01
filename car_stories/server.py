@@ -1,0 +1,173 @@
+"""Live web viewer. The story lives in the image; interesting clusters are kept.
+
+The server runs the detect→track→narrate pipeline on a background thread, bakes
+a few short stories onto the frame, and streams it over a websocket — so the live
+image is self-contained. When several stories land at once, it saves that frame
+to a gallery on disk. The browser shows the live image + the accumulating gallery.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import datetime as _dt
+import pathlib
+import threading
+import time
+
+import cv2
+import yaml
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from .narration import NarrationManager
+from .narrator import Narrator
+from .observe import Tracker, iter_snapshots, iter_video
+from .render import draw_live
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+WEB = pathlib.Path(__file__).resolve().parent / "web"
+GALLERY = ROOT / "out" / "gallery"
+GALLERY.mkdir(parents=True, exist_ok=True)
+MAX_WIDTH = 960
+
+app = FastAPI()
+app.mount("/gallery-img", StaticFiles(directory=str(GALLERY)), name="gallery")
+
+
+def _clock() -> str:
+    h = _dt.datetime.now().hour
+    return ("the small hours" if h < 6 else "morning" if h < 11 else "midday"
+            if h < 14 else "late afternoon" if h < 18 else "evening"
+            if h < 22 else "night")
+
+
+def _load_cams() -> dict:
+    with open(ROOT / "cams.yaml") as f:
+        return yaml.safe_load(f)
+
+
+def _resolve_youtube(url: str) -> str:
+    """Resolve a YouTube (live) URL to a fresh HLS manifest via yt-dlp."""
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["yt-dlp", "-g", "--no-warnings", "-f", "best[height<=720]/best", url],
+            capture_output=True, text=True, timeout=40).stdout.strip().splitlines()
+        return out[-1] if out else ""
+    except Exception:
+        return ""
+
+
+def _frames(cam: dict, stop: threading.Event):
+    if cam.get("type") == "snapshot":
+        yield from iter_snapshots(cam["source"], cam.get("interval", 1.0), stop=stop)
+    elif cam.get("type") == "youtube":
+        while not stop.is_set():           # re-resolve when a live manifest expires
+            manifest = _resolve_youtube(cam["source"])
+            if not manifest:
+                stop.wait(5)
+                continue
+            yield from iter_video(manifest, loop=False, stop=stop)
+    else:
+        src = cam["source"]
+        if not str(src).startswith(("http", "rtsp", "/")):
+            src = str(ROOT / src)
+        yield from iter_video(src, loop=cam.get("loop", False), stop=stop)
+
+
+class Session:
+    def __init__(self, cam: dict) -> None:
+        self.cam = cam
+        self.stop = threading.Event()
+        self._lock = threading.Lock()
+        self._latest: dict | None = None
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def close(self) -> None:
+        self.stop.set()
+
+    def get(self) -> dict | None:
+        with self._lock:
+            return self._latest
+
+    def _run(self) -> None:
+        tracker = Tracker(classify=True)   # fine body-type on close crops
+        default_min = 4 if self.cam.get("type") == "snapshot" else 12
+        nm = NarrationManager(Narrator(), clock=_clock(),
+                              min_frames=self.cam.get("min_frames", default_min),
+                              locale=self.cam.get("locale", "default"))
+        for idx, frame in enumerate(_frames(self.cam, self.stop)):
+            if self.stop.is_set():
+                break
+            if frame.shape[1] > MAX_WIDTH:
+                s = MAX_WIDTH / frame.shape[1]
+                frame = cv2.resize(frame, (MAX_WIDTH, int(frame.shape[0] * s)))
+            overlays = nm.step(tracker.update(frame, idx), fps=15.0)
+            composed = draw_live(frame, overlays)
+            ok, buf = cv2.imencode(".jpg", composed, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if not ok:
+                continue
+            with self._lock:
+                self._latest = {"jpeg": base64.b64encode(buf).decode()}
+
+
+@app.get("/")
+async def index():
+    return FileResponse(WEB / "index.html")
+
+
+@app.get("/cams")
+async def cams():
+    return JSONResponse(_load_cams())
+
+
+@app.get("/gallery")
+async def gallery():
+    files = sorted(GALLERY.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return JSONResponse([{"url": f"/gallery-img/{p.name}"} for p in files[:60]])
+
+
+@app.post("/clip")
+async def clip(payload: dict = Body(...)):
+    """Save the frame the user clipped (base64 JPEG from the browser)."""
+    data = payload.get("jpeg", "")
+    if "," in data:
+        data = data.split(",", 1)[1]
+    name = f"clip-{int(time.time() * 1000)}.jpg"
+    (GALLERY / name).write_bytes(base64.b64decode(data))
+    return JSONResponse({"url": f"/gallery-img/{name}"})
+
+
+@app.websocket("/ws")
+async def ws(websocket: WebSocket, cam: str | None = None):
+    await websocket.accept()
+    config = _load_cams()
+    cam_id = cam or config.get("default")
+    chosen = next((c for c in config["cams"] if c["id"] == cam_id), config["cams"][0])
+    session = Session(chosen)
+    session.start()
+    try:
+        while True:
+            latest = session.get()
+            if latest:
+                await websocket.send_json({"type": "frame", **latest})
+            await asyncio.sleep(1 / 15)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        session.close()
+
+
+def main() -> None:
+    import uvicorn
+    print("car-stories viewer → http://127.0.0.1:8000")
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+
+
+if __name__ == "__main__":
+    main()

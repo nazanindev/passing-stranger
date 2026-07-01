@@ -1,0 +1,97 @@
+# Curated cams. The page opens on `default`; the rest are in the switcher.
+# type: video    → file path or stream URL (m3u8/rtsp), opened via OpenCV
+# type: snapshot → periodic-JPEG URL, polled every `interval`s (no ffmpeg)
+default: local-day
+
+cams:
+  - id: local-day
+    name: "Daytime Street"
+    location: "bundled sample"
+    type: video
+    source: samples/traffic-day.mp4
+    loop: true
+
+  - id: local-night
+    name: "SR-99 @ S Lander St"
+    location: "Seattle, WA — bundled"
+    type: video
+    source: samples/traffic.mp4
+    loop: true
+
+  - id: local-street
+    name: "Street-Level Drive"
+    location: "bundled sample — close-up"
+    type: video
+    source: samples/street.mp4
+    loop: true
+    locale: japan
+
+  # live YouTube street cams (resolved fresh each connect; may occasionally be offline)
+  - id: miami-beach
+    name: "South Beach"
+    location: "Miami — live"
+    type: youtube
+    source: "https://www.youtube.com/watch?v=g5BS95j2rmM"
+    locale: latin
+
+  - id: times-square
+    name: "Times Square"
+    location: "NYC — live"
+    type: youtube
+    source: "https://www.youtube.com/watch?v=S3oGxws_Cik"
+
+  - id: tokyo-streets
+    name: "Tokyo Streets"
+    location: "Tokyo — live"
+    type: youtube
+    source: "https://www.youtube.com/watch?v=L6wO1-U2RTY"
+    locale: japan
+
+  - id: london-streets
+    name: "London Streets"
+    location: "London — live"
+    type: youtube
+    source: "https://www.youtube.com/watch?v=pveFz6hLzeY"
+    locale: uk
+
+  - id: la-i110
+    name: "I-110 @ Avenue 26"
+    location: "Cypress Park, LA"
+    type: snapshot
+    source: "https://cwwp2.dot.ca.gov/data/d7/cctv/image/i110196avenue26offramp/i110196avenue26offramp.jpg"
+    interval: 1.0
+
+  - id: la-i5
+    name: "I-5 @ Slauson Ave"
+    location: "Los Angeles"
+    type: snapshot
+    source: "https://cwwp2.dot.ca.gov/data/d7/cctv/image/i52slausonave/i52slausonave.jpg"
+    interval: 1.0
+
+  - id: oak-i580
+    name: "I-580 west of SR-24"
+    location: "Oakland"
+    type: snapshot
+    source: "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv102i580westofsr24/tv102i580westofsr24.jpg"
+    interval: 1.0
+
+  - id: sd-163
+    name: "SR-163 near Friars"
+    location: "San Diego"
+    type: snapshot
+    source: "https://cwwp2.dot.ca.gov/data/d11/cctv/image/c348sr163friarsneb/c348sr163friarsneb.jpg"
+    interval: 1.0
+
+  - id: sac-hwy5
+    name: "Hwy 5 at Pocket"
+    location: "Sacramento"
+    type: snapshot
+    source: "https://cwwp2.dot.ca.gov/data/d3/cctv/image/hwy5atpocket/hwy5atpocket.jpg"
+    interval: 1.0
+
+  - id: oc-sr91
+    name: "SR-91 @ Beach Blvd"
+    location: "Buena Park"
+    type: snapshot
+    source: "https://cwwp2.dot.ca.gov/data/d12/cctv/image/sr912beachboulevard/sr912beachboulevard.jpg"
+    interval: 1.0
