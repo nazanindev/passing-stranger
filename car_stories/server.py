@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as _dt
+import json
 import os
 import pathlib
 import threading
@@ -158,10 +159,57 @@ async def cams():
     return JSONResponse(_load_cams())
 
 
+def _is_curator(request: Request) -> bool:
+    if CURATOR_TOKEN:
+        return request.headers.get("x-curator", "") == CURATOR_TOKEN
+    return bool(request.client) and request.client.host in ("127.0.0.1", "::1")
+
+
+_ORDER = GALLERY / "order.json"
+
+
+def _load_order() -> list[str]:
+    try:
+        return [str(n) for n in json.loads(_ORDER.read_text())]
+    except Exception:
+        return []
+
+
+def _save_order(names: list[str]) -> None:
+    _ORDER.write_text(json.dumps(names))
+
+
 @app.get("/gallery")
 async def gallery():
-    files = sorted(GALLERY.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return JSONResponse([{"url": f"/gallery-img/{p.name}"} for p in files[:60]])
+    """Curator's order first-class: arranged clips in their order, new
+    (unarranged) clips on top, newest first."""
+    files = {p.name: p for p in GALLERY.glob("*.jpg")}
+    ordered = [n for n in _load_order() if n in files]
+    fresh = sorted((n for n in files if n not in set(ordered)),
+                   key=lambda n: files[n].stat().st_mtime, reverse=True)
+    return JSONResponse([{"url": f"/gallery-img/{n}", "name": n}
+                         for n in (fresh + ordered)[:60]])
+
+
+@app.post("/gallery/delete")
+async def gallery_delete(request: Request, payload: dict = Body(...)):
+    if not _is_curator(request):
+        return JSONResponse({"error": "the gallery is curated"}, status_code=403)
+    name = pathlib.Path(str(payload.get("name", ""))).name   # no traversal
+    p = GALLERY / name
+    if name.endswith(".jpg") and p.is_file():
+        p.unlink()
+    _save_order([n for n in _load_order() if n != name])
+    return JSONResponse({"ok": True})
+
+
+@app.post("/gallery/order")
+async def gallery_order(request: Request, payload: dict = Body(...)):
+    if not _is_curator(request):
+        return JSONResponse({"error": "the gallery is curated"}, status_code=403)
+    names = [pathlib.Path(str(n)).name for n in payload.get("names", [])][:500]
+    _save_order([n for n in names if n.endswith(".jpg")])
+    return JSONResponse({"ok": True})
 
 
 @app.post("/clip")
@@ -170,11 +218,7 @@ async def clip(request: Request, payload: dict = Body(...)):
     The gallery is curated by one person: only loopback may clip. (Behind a
     reverse proxy every client looks like loopback — the deploy must put this
     route behind auth or not proxy it at all.)"""
-    if CURATOR_TOKEN:
-        ok = request.headers.get("x-curator", "") == CURATOR_TOKEN
-    else:  # local dev: loopback is the curator
-        ok = bool(request.client) and request.client.host in ("127.0.0.1", "::1")
-    if not ok:
+    if not _is_curator(request):
         return JSONResponse({"error": "the gallery is curated"}, status_code=403)
     data = payload.get("jpeg", "")
     if "," in data:

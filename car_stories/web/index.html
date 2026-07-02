@@ -23,13 +23,22 @@
   #main{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
     overflow:hidden}
   #cv{display:block;max-width:100%;max-height:100%}
-  #grid{position:absolute;inset:0;overflow-y:auto;padding:.8rem;display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem;align-content:start;
+  #grid{position:absolute;inset:0;overflow-y:auto;padding:1rem;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:.9rem;align-content:start;
     background:var(--panel)}
   #grid[hidden]{display:none}
-  #grid a{display:block;border:1px solid var(--hair);border-radius:.35rem;overflow:hidden;
-    line-height:0;animation:in .5s ease}
+  #grid .tile{position:relative;border:1px solid var(--hair);border-radius:.35rem;
+    overflow:hidden;line-height:0;animation:in .5s ease}
+  #grid .tile a{display:block;line-height:0}
   #grid img{width:100%;display:block}
+  #grid .tile .del{position:absolute;top:.45rem;right:.45rem;display:none;
+    background:rgba(14,13,11,.72);border:1px solid var(--hair);color:var(--ink);
+    font:inherit;font-size:.7rem;line-height:1;padding:.3rem .45rem;border-radius:999px;
+    cursor:pointer}
+  #grid .tile:hover .del{display:block}
+  #grid .tile .del:hover{border-color:rgba(242,237,226,.6)}
+  #grid .tile.dragging{opacity:.35}
+  #grid .tile[draggable="true"]{cursor:grab}
   @keyframes in{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
   footer{flex:none;display:flex;align-items:center;gap:.55rem;padding:.42rem 1.1rem;
     border-top:1px solid var(--hair);color:var(--dim);
@@ -70,7 +79,7 @@ const cv=document.getElementById('cv'), nav=document.getElementById('nav');
 const grid=document.getElementById('grid'), clipbtn=document.getElementById('clipbtn');
 const statustext=document.getElementById('statustext'), camline=document.getElementById('camline');
 const livedot=document.getElementById('livedot');
-let currentCam=null, gallerySeen=new Set(), retryTimer=null, mode='stream';
+let currentCam=null, galleryItems=[], galleryDragging=false, retryTimer=null, mode='stream';
 // the curator's browser: localhost, or a one-time visit with ?key=<token>
 const urlKey=new URLSearchParams(location.search).get('key');
 if(urlKey){localStorage.setItem('curator',urlKey);
@@ -78,13 +87,38 @@ if(urlKey){localStorage.setItem('curator',urlKey);
 const curatorKey=localStorage.getItem('curator')||'';
 const isCurator=['localhost','127.0.0.1'].includes(location.hostname)||!!curatorKey;
 
-function addTile(url, front){
-  if(gallerySeen.has(url)) return;
-  gallerySeen.add(url);
-  const a=document.createElement('a'); a.href=url; a.target='_blank';
-  a.innerHTML='<img src="'+url+'">';
-  front ? grid.prepend(a) : grid.appendChild(a);
-  while(grid.children.length>60) grid.lastChild.remove();
+const curatorHdrs={'Content-Type':'application/json','X-Curator':curatorKey};
+
+function renderGallery(){
+  grid.innerHTML='';
+  for(const it of galleryItems){
+    const t=document.createElement('div'); t.className='tile'; t.dataset.name=it.name;
+    t.innerHTML='<a href="'+it.url+'" target="_blank"><img src="'+it.url+'" loading="lazy"></a>';
+    if(isCurator){
+      const x=document.createElement('button'); x.className='del'; x.textContent='✕';
+      x.title='lose this one';
+      x.onclick=async e=>{e.preventDefault();
+        if(!confirm('lose this one?')) return;
+        await fetch('/gallery/delete',{method:'POST',headers:curatorHdrs,
+          body:JSON.stringify({name:it.name})});
+        galleryItems=galleryItems.filter(g=>g.name!==it.name); renderGallery();
+      };
+      t.appendChild(x);
+      t.draggable=true;
+      t.ondragstart=e=>{galleryDragging=true; t.classList.add('dragging');
+        e.dataTransfer.effectAllowed='move';};
+      t.ondragover=e=>{e.preventDefault();
+        const src=grid.querySelector('.dragging'); if(!src||src===t) return;
+        const r=t.getBoundingClientRect();
+        grid.insertBefore(src, (e.clientX-r.left)/r.width<.5 ? t : t.nextSibling);};
+      t.ondragend=async ()=>{t.classList.remove('dragging'); galleryDragging=false;
+        galleryItems=[...grid.children].map(el=>galleryItems.find(g=>g.name===el.dataset.name))
+          .filter(Boolean);
+        await fetch('/gallery/order',{method:'POST',headers:curatorHdrs,
+          body:JSON.stringify({names:galleryItems.map(g=>g.name)})});};
+    }
+    grid.appendChild(t);
+  }
 }
 
 clipbtn.onclick=async ()=>{
@@ -95,11 +129,9 @@ clipbtn.onclick=async ()=>{
   c.width=cv.naturalWidth; c.height=cv.naturalHeight;
   c.getContext('2d').drawImage(cv,0,0);
   const b64=c.toDataURL('image/jpeg',0.9).split(',')[1];
-  const r=await fetch('/clip',{method:'POST',
-    headers:{'Content-Type':'application/json','X-Curator':curatorKey},
+  await fetch('/clip',{method:'POST',headers:curatorHdrs,
     body:JSON.stringify({jpeg:b64})});
-  const {url}=await r.json();
-  addTile(url, true);
+  galleryItems=[]; pollGallery();          // fresh clip lands on top
 };
 
 // native MJPEG into a plain <img> — the browser handles every frame in C++;
@@ -129,9 +161,11 @@ function showGallery(){
 }
 
 async function pollGallery(){
+  if(galleryDragging) return;              // don't fight the curator's hands
   try{
     const items=await (await fetch('/gallery')).json();
-    for(const it of [...items].reverse()) addTile(it.url, true);  // newest first
+    if(items.map(i=>i.name).join('|')===galleryItems.map(i=>i.name).join('|')) return;
+    galleryItems=items; renderGallery();
   }catch(e){}
 }
 
