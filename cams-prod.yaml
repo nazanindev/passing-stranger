@@ -69,6 +69,16 @@ cams:
     source: "https://webcams.nyctmc.org/api/cameras/3309fba1-cc5f-483a-92bc-7d85951f1558/image"
     interval: 2.0
 
+  - id: nyc-broadway-morris
+    region: nyc
+    vibe: downtown
+    tz: America/New_York
+    name: "Broadway @ Morris St"
+    location: "NYC — DOT public feed"
+    type: snapshot
+    source: "https://webcams.nyctmc.org/api/cameras/08328372-55a2-448a-b180-9b4bce0b8d9e/image"
+    interval: 2.0
+
   - id: nyc-water-john
     region: nyc
     vibe: downtown
