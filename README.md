@@ -1,6 +1,8 @@
 # passing stranger
 
-*I am to see to it that I do not lose you*
+*"Passing stranger! you do not know how longingly I look upon you, […]
+I am to see to it that I do not lose you."*
+— Walt Whitman, [To a Stranger](https://poets.org/poem/stranger)
 
 ![a Tokyo crossing, being read](assets/hero.jpg)
 
