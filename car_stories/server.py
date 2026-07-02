@@ -51,6 +51,11 @@ _narrator = Narrator()
 app = FastAPI()
 app.mount("/gallery-img", StaticFiles(directory=str(GALLERY)), name="gallery")
 
+# set once main() builds the uvicorn Server — the live MJPEG streams poll its
+# should_exit so they let go the instant a SIGTERM lands, instead of holding the
+# graceful-shutdown open until systemd loses patience and SIGKILLs us
+_server = None
+
 
 def _scene_clock(tz_name: str | None) -> dict:
     """The cam's own local time — a Tokyo cam must not run on this laptop's clock."""
@@ -285,7 +290,7 @@ async def stream(cam: str | None = None):
     async def gen():
         last_seq = -1
         try:
-            while True:
+            while not (_server and _server.should_exit):
                 latest = session.get()
                 if latest and latest["seq"] != last_seq:
                     last_seq = latest["seq"]
@@ -301,12 +306,28 @@ async def stream(cam: str | None = None):
                              media_type="multipart/x-mixed-replace; boundary=frame")
 
 
+@app.on_event("shutdown")
+def _stop_sessions() -> None:
+    """Signal every cam worker to quit so OpenCV releases its captures. The
+    threads are daemons (they can't hold the process open), so a worker blocked
+    in a slow cap.read() won't stall the exit — this is just a clean release."""
+    with _sessions_lock:
+        for s in _sessions.values():
+            s.close()
+
+
 def main() -> None:
+    global _server
     import uvicorn
     host = os.environ.get("CS_HOST", "127.0.0.1")
     port = int(os.environ.get("CS_PORT", "8000"))
     print(f"passing stranger → http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # bound the graceful wait: with the streams bailing on should_exit this is
+    # only a backstop, but it guarantees we exit long before systemd's SIGKILL
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning",
+                            timeout_graceful_shutdown=5)
+    _server = uvicorn.Server(config)
+    _server.run()
 
 
 if __name__ == "__main__":
