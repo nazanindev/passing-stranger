@@ -109,7 +109,8 @@ class Session:
         default_min = 4 if self.cam.get("type") == "snapshot" else 12
         nm = NarrationManager(Narrator(),
                               min_frames=self.cam.get("min_frames", default_min),
-                              locale=self.cam.get("locale", "default"))
+                              locale=self.cam.get("locale", "default"),
+                              vibe=self.cam.get("vibe", ""))
         for idx, frame in enumerate(_frames(self.cam, self.stop)):
             if self.stop.is_set():
                 break

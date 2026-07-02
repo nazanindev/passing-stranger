@@ -12,6 +12,7 @@ cams:
     loop: true
 
   - id: local-night
+    vibe: freeway
     name: "SR-99 @ S Lander St"
     location: "Seattle, WA — bundled"
     type: video
@@ -19,6 +20,7 @@ cams:
     loop: true
 
   - id: local-street
+    vibe: downtown
     name: "Street-Level Drive"
     location: "bundled sample — close-up"
     type: video
@@ -28,6 +30,7 @@ cams:
 
   # live YouTube street cams (resolved fresh each connect; may occasionally be offline)
   - id: miami-beach
+    vibe: beach
     tz: America/New_York
     name: "South Beach"
     location: "Miami — live"
@@ -36,6 +39,7 @@ cams:
     locale: latin
 
   - id: times-square
+    vibe: tourist
     tz: America/New_York
     name: "Times Square"
     location: "NYC — live"
@@ -43,6 +47,7 @@ cams:
     source: "https://www.youtube.com/watch?v=S3oGxws_Cik"
 
   - id: tokyo-streets
+    vibe: downtown
     tz: Asia/Tokyo
     name: "Tokyo Streets"
     location: "Tokyo — live"
@@ -51,6 +56,7 @@ cams:
     locale: japan
 
   - id: london-streets
+    vibe: downtown
     tz: Europe/London
     name: "London Streets"
     location: "London — live"
@@ -59,6 +65,7 @@ cams:
     locale: uk
 
   - id: la-i110
+    vibe: freeway
     tz: America/Los_Angeles
     name: "I-110 @ Avenue 26"
     location: "Cypress Park, LA"
@@ -67,6 +74,7 @@ cams:
     interval: 1.0
 
   - id: la-i5
+    vibe: freeway
     tz: America/Los_Angeles
     name: "I-5 @ Slauson Ave"
     location: "Los Angeles"
@@ -75,6 +83,7 @@ cams:
     interval: 1.0
 
   - id: oak-i580
+    vibe: freeway
     tz: America/Los_Angeles
     name: "I-580 west of SR-24"
     location: "Oakland"
@@ -83,6 +92,7 @@ cams:
     interval: 1.0
 
   - id: sd-163
+    vibe: freeway
     tz: America/Los_Angeles
     name: "SR-163 near Friars"
     location: "San Diego"
@@ -91,6 +101,7 @@ cams:
     interval: 1.0
 
   - id: sac-hwy5
+    vibe: freeway
     tz: America/Los_Angeles
     name: "Hwy 5 at Pocket"
     location: "Sacramento"
@@ -99,6 +110,7 @@ cams:
     interval: 1.0
 
   - id: oc-sr91
+    vibe: freeway
     tz: America/Los_Angeles
     name: "SR-91 @ Beach Blvd"
     location: "Buena Park"

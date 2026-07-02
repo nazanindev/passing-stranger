@@ -16,12 +16,13 @@ from . import correlator, style
 
 
 def _weave(rng, pool, actives):
-    """Pick one line, leaning into the car's read: lines the correlator claims
-    for the active temper/orbit are favored, lines claimed only elsewhere are
-    dropped, free lines stay in. If the filter empties the pool, the pool stands."""
+    """Pick one line within the car's read: lines claimed by other reads are
+    dropped; on-read and free lines stay in on equal footing (favoring the
+    claimed ones concentrates picks and kills novelty). If the filter empties
+    the pool, the pool stands."""
     on = [e for e in pool if correlator.claims(e) & actives]
     free = [e for e in pool if not correlator.claims(e)]
-    return rng.choice(on * 2 + free if on else (free or list(pool)))
+    return rng.choice(on + free or list(pool))
 
 
 def _pick(rng, pool_map, key, actives):
@@ -36,9 +37,9 @@ class Narrator:
         # novelty memory: the storyteller won't repeat a line it said recently —
         # if the dice land on one, it rerolls (~an hour of stories at busy cams)
         from collections import deque
-        self._recent: deque = deque(maxlen=80)
+        self._recent: deque = deque(maxlen=220)
 
-    def _fresh(self, roll, tries: int = 6):
+    def _fresh(self, roll, tries: int = 10):
         """Reroll until the line hasn't been said recently (or give up)."""
         line = roll()
         for _ in range(tries):
@@ -103,6 +104,12 @@ class Narrator:
         scene_phrase = rng.choice(scene_phrases) if scene_phrases else ""
         other = features.get("other", "")
 
+        # length is earned: one clause unless the evidence itself is notable —
+        # visible behavior, a special body, or an emphatic read
+        exceptional = (bool(features.get("behavior"))
+                       or kind in style.KIND_ARCHETYPE or kind in style.MULTI
+                       or r["conviction"] >= 6)
+
         if features["vehicle_type"] == "person":
             walk = features.get("mood", "ambling")  # gait, not the correlator's read
 
@@ -110,6 +117,8 @@ class Narrator:
                 attrs = {"who": _weave(rng, style.PERSON_WHO, actives),
                          "mood": _weave(rng, style.PERSON_MOOD[walk], actives),
                          "toward": _weave(rng, style.TOWARD, actives)}
+                if walk == "ambling" and r["conviction"] < 4:   # unremarkable gait
+                    return attrs[rng.choice(("mood", "mood", "who"))]
                 return rng.choice(style.PERSON_TEMPLATES).format(**attrs)
 
             lines = [self._fresh(roll_person)]
@@ -154,8 +163,10 @@ class Narrator:
                     "scene_phrase": scene_phrase,
                     "other": other,
                 }
-                # shape first, then a template within it — scene and pack shapes
-                # only exist when the street actually offered the evidence
+                if not exceptional:                # an ordinary life: one clause
+                    return rng.choice(style.TEMPLATES_SHORT).format(**attrs)
+                # exceptional: shape first, then a template within it — scene and
+                # pack shapes only exist when the street offered the evidence
                 shapes = [("plain", 5), ("turn", 2)]
                 if scene_phrase:
                     shapes.append(("scene", 3))
@@ -175,6 +186,7 @@ class Narrator:
                               f"{_weave(rng, style.ARCH_NOUN, actives)}")
 
         result = {"lines": lines, "archetype": archetype, "kind": kind,
-                  "temper": r["temper"], "orbit": r["orbit"]}
+                  "temper": r["temper"], "orbit": r["orbit"],
+                  "elaborated": exceptional}
         self._cache[track_id] = result
         return result

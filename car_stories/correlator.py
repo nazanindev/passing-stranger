@@ -68,6 +68,9 @@ TEMPER_VOTES = {
     "wanderer": {"restless": 2},
     "rugged": {"restless": 2},
     "motorcycle": {"restless": 2},
+    # the place itself (vibe: in cams.yaml)
+    "beach": {"light": 2},
+    "tourist": {"lost": 1, "light": 1},
     # the street itself
     "the crawl": {"weary": 2},
     "the thick of it": {"steady": 1},
@@ -97,6 +100,12 @@ ORBIT_VOTES = {
     "rugged": {"escape": 2},
     "motorcycle": {"escape": 1, "social": 1},
     "vintage": {"social": 1},
+    # the place itself (vibe: in cams.yaml) — nobody on Ocean Drive is
+    # commuting to a night shift
+    "beach": {"social": 2, "escape": 2, "work": -2, "school": -1},
+    "tourist": {"social": 1, "escape": 1, "work": -1},
+    "downtown": {"work": 1, "social": 1},
+    "freeway": {"work": 1},
 }
 
 TEMPERS = {
@@ -238,33 +247,38 @@ def claims(entry: str) -> frozenset:
     return _CLAIMS.get(entry, _EMPTY)
 
 
-def _tally(votes: dict, signals, order: list, default: str) -> str:
+def _tally(votes: dict, signals, order: list, default: str) -> tuple[str, int]:
+    """Returns (winner, margin) — margin is how far ahead the winner was."""
     score = {m: 0 for m in order}
     for s in signals:
         for m, w in votes.get(s or "", {}).items():
             score[m] += w
-    best = max(score.values())
+    ranked = sorted(score.values(), reverse=True)
+    best, second = ranked[0], ranked[1] if len(ranked) > 1 else 0
     if best <= 0:
-        return default
-    return next(m for m in order if score[m] == best)
+        return default, 0
+    return next(m for m in order if score[m] == best), best - second
 
 
 def read(features: dict) -> dict:
     """The reading: every attribute votes on each axis; the winners are the
-    read. Deterministic — same evidence, same read."""
+    read. Deterministic — same evidence, same read. `conviction` is how
+    emphatic the votes were — an unremarkable car reads near zero."""
     from . import style
     kind = style.kind_of(features)
     sc = features.get("scene") or {}
     day = "weekend" if sc.get("weekend") else "weekday"
-    temper = _tally(TEMPER_VOTES,
-                    (features.get("speed"), features.get("behavior"),
-                     features.get("color"), features.get("direction"), kind,
-                     features.get("time_of_day"), sc.get("tempo"), sc.get("light")),
-                    TEMPER_ORDER, "steady")
-    orbit = _tally(ORBIT_VOTES,
-                   (features.get("time_of_day"), day, kind),
-                   ORBIT_ORDER, "errands")
-    return {"temper": temper, "orbit": orbit}
+    temper, tm = _tally(TEMPER_VOTES,
+                        (features.get("speed"), features.get("behavior"),
+                         features.get("color"), features.get("direction"), kind,
+                         features.get("time_of_day"), features.get("vibe"),
+                         sc.get("tempo"), sc.get("light")),
+                        TEMPER_ORDER, "steady")
+    orbit, om = _tally(ORBIT_VOTES,
+                       (features.get("time_of_day"), day, kind,
+                        features.get("vibe")),
+                       ORBIT_ORDER, "errands")
+    return {"temper": temper, "orbit": orbit, "conviction": tm + om}
 
 
 def _style_lines() -> set:

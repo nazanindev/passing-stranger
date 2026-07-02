@@ -18,13 +18,15 @@ from .observe import Track
 class NarrationManager:
     def __init__(self, narrator: Narrator, min_frames: int = 12,
                  clock: str = "unknown", max_shown: int = 4,
-                 reveal_every: int = 2, locale: str = "default") -> None:
+                 reveal_every: int = 2, locale: str = "default",
+                 vibe: str = "") -> None:
         self.narrator = narrator
         self.min_frames = min_frames
         self.clock = clock
         self.max_shown = max_shown        # how many cars carry an overlay at once
         self.reveal_every = reveal_every  # frames per revealed observation
-        self.locale = locale              # which name pool fits this cam
+        self.locale = locale              # grounds reads like yellow-car→cab
+        self.vibe = vibe                  # the place's character (beach, tourist…)
 
     def _behavior(self, t: Track, pack_median: float) -> str:
         """A driving-behavior read, relative to the other cars on screen."""
@@ -91,6 +93,7 @@ class NarrationManager:
         for t in shown:
             feats = t.features(fps, clock)
             feats["locale"] = self.locale
+            feats["vibe"] = self.vibe
             feats["scene"] = scene
             feats["scene_tags"] = scene_tags
             if t.cls_name == "person":

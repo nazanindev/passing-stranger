@@ -224,7 +224,7 @@ BUS_LIVES = ["late for work", "going home", "asleep by the window",
              "a cake box held level, mostly", "reading over a stranger's shoulder",
              # the rationed ache
              "texting someone they shouldn't", "watching their stop go by on purpose"]
-BUS_COUNT = 3
+BUS_COUNT = 2
 
 # school bus → the lives are small and the stakes are enormous
 KIDS_LIVES = ["homework finished on a knee", "a permission slip, unsigned",
@@ -237,21 +237,34 @@ KIDS_LIVES = ["homework finished on a knee", "a permission slip, unsigned",
 MULTI_LIVES = {"kids": KIDS_LIVES}  # everyone else glimpses BUS_LIVES
 
 # --- the rest: grounded in motion / time / direction --------------------------
-EMOTION = {  # by speed — mostly mundane; one ache each, rationed
+EMOTION = {  # by speed — mostly mundane; one ache each, rationed.
+    # These carry the one-clause stories, so the pools stay deep — an hour of
+    # terse reads shouldn't lap itself.
     "racing": ["late again", "cutting it close, as usual", "hoping the lights cooperate",
                "rehearsing an excuse", "five minutes behind all day",
                "ten minutes from consequences", "driving like the light was personal",
+               "green lights all the way, somehow", "passing on the right, sorry about it",
+               "the fast lane as a personality", "wringing minutes out of the mile",
+               "outrunning the forecast", "late to something unmissable",
                "running from it"],
     "cruising": ["easy for once", "in no rush", "between things",
                  "the radio doing the feeling", "letting the day settle",
                  "windows down on principle", "making good time and telling no one",
                  "humming something old", "tempted to miss the exit on purpose",
+                 "keeping a comfortable distance", "signaling early, like they teach",
+                 "at peace with the speed limit", "a full tank and no opinions",
+                 "the commute on autopilot", "letting the fast ones pass",
                  "alone on purpose"],
     "crawling": ["stuck and patient", "done with today", "waiting it out",
                  "counting brake lights", "resigned to the clock",
                  "one podcast from peace", "in line like everyone else",
+                 "third cycle of the same red light",
+                 "close enough to read bumper stickers",
+                 "a car length gained, a car length lost",
+                 "patience by necessity", "watching the pedestrians win",
                  "too tired to arrive"],
     "_": ["not ready to go", "in no hurry to get out", "idling on it",
+          "waiting on someone's front door", "double-parked and betting on it",
           "finishing the song first"],
 }
 
@@ -346,8 +359,16 @@ ARCH_NOUN = ["Commuter", "Visitor", "Regular", "Neighbor", "Local",
              "Stranger", "Witness", "Wanderer", "Guest"]
 
 # how a single line gets assembled (bus is handled separately).
-# The narrator picks a *shape* first — plain, turn, scene, or pack — then a
-# template within it. Scene and pack shapes only fire when the evidence exists.
+# Most lives are ONE clause — the short templates below. The multi-clause
+# shapes (plain, turn, scene, pack) are reserved for exceptional cars: notable
+# behavior, a special body, or a read the votes were emphatic about.
+TEMPLATES_SHORT = [
+    "{emotion}", "{emotion}", "{emotion}",   # the feeling, mostly
+    "{toward}",
+    "{who}",
+    "{purpose}",
+]
+
 TEMPLATES = [
     "{who}, {emotion}",
     "{who} · {toward}",
