@@ -67,7 +67,9 @@ def _scene_clock(tz_name: str | None) -> dict:
 
 
 def _load_cams() -> dict:
-    with open(ROOT / "cams.yaml") as f:
+    # CS_CAMS picks the roster: the laptop runs the full global list, the
+    # server runs cams-prod.yaml (feeds reachable from a datacenter)
+    with open(ROOT / os.environ.get("CS_CAMS", "cams.yaml")) as f:
         return yaml.safe_load(f)
 
 

@@ -1,0 +1,60 @@
+# Production roster — every feed verified reachable from the server itself
+# (datacenter IPs can't resolve YouTube live; the global YouTube cams in
+# cams.yaml still work for local runs). All open public DOT feeds.
+default: wilm-2nd-king
+
+cams:
+  - id: wilm-2nd-king
+    region: philly
+    vibe: downtown
+    tz: America/New_York
+    name: "2nd St @ King St"
+    location: "Wilmington, DE — DelDOT public feed"
+    type: video
+    source: "https://video.deldot.gov/live/NCAM201.stream/playlist.m3u8"
+
+  - id: newark-main
+    region: philly
+    vibe: downtown
+    tz: America/New_York
+    name: "Main St at the Green"
+    location: "Newark, DE — DelDOT public feed"
+    type: video
+    source: "https://video.deldot.gov/live/NCAM183.stream/playlist.m3u8"
+
+  - id: newark-pomeroy
+    region: philly
+    vibe: downtown
+    tz: America/New_York
+    name: "E Main St @ Pomeroy"
+    location: "Newark, DE — DelDOT public feed"
+    type: video
+    source: "https://video.deldot.gov/live/NCAM185.stream/playlist.m3u8"
+
+  - id: wilm-mlk
+    region: philly
+    vibe: downtown
+    tz: America/New_York
+    name: "MLK Blvd @ Justison St"
+    location: "Wilmington, DE — DelDOT public feed"
+    type: video
+    source: "https://video.deldot.gov/live/NCAM153.stream/playlist.m3u8"
+
+  - id: rehoboth
+    region: philly
+    vibe: beach
+    tz: America/New_York
+    name: "Rehoboth Ave"
+    location: "Rehoboth Beach, DE — DelDOT public feed"
+    type: video
+    source: "https://video.deldot.gov/live/KCAM187.stream/playlist.m3u8"
+
+  - id: nyc-broadway-45
+    region: nyc
+    vibe: tourist
+    tz: America/New_York
+    name: "Broadway @ 45th St"
+    location: "NYC — DOT public feed"
+    type: snapshot
+    source: "https://webcams.nyctmc.org/api/cameras/053e8995-f8cb-4d02-a659-70ac7c7da5db/image"
+    interval: 2.0
