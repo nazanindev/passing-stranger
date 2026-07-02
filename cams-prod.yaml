@@ -58,3 +58,23 @@ cams:
     type: snapshot
     source: "https://webcams.nyctmc.org/api/cameras/053e8995-f8cb-4d02-a659-70ac7c7da5db/image"
     interval: 2.0
+
+  - id: nyc-fdr-oldslip
+    region: nyc
+    vibe: freeway
+    tz: America/New_York
+    name: "FDR Dr @ Old Slip"
+    location: "NYC — DOT public feed"
+    type: snapshot
+    source: "https://webcams.nyctmc.org/api/cameras/3309fba1-cc5f-483a-92bc-7d85951f1558/image"
+    interval: 2.0
+
+  - id: nyc-water-john
+    region: nyc
+    vibe: downtown
+    tz: America/New_York
+    name: "Water St @ John St"
+    location: "NYC — DOT public feed"
+    type: snapshot
+    source: "https://webcams.nyctmc.org/api/cameras/ecdddb78-10be-47c6-ba27-e5d9da6b9a22/image"
+    interval: 2.0
