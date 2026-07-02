@@ -111,6 +111,25 @@ ORBIT_VOTES = {
     "tourist": {"social": 1, "escape": 1, "work": -1},
     "downtown": {"work": 1, "social": 1},
     "freeway": {"work": 1},
+    # the street's density — a jammed street is people with somewhere to be, an
+    # empty one a life with nowhere it has to be. Flat votes; the hour above
+    # picks which end of the commute a crawl is (morning→work, evening→home).
+    "the crawl": {"work": 1, "home": 1},
+    "the thick of it": {"work": 1, "errands": 1},
+    "an empty street": {"nowhere": 2, "escape": 1},
+    "a quiet road": {"nowhere": 1, "escape": 1},
+    # daylight vs dark — night bends toward the social and the aimless, hard
+    # daylight toward the day's errands (the hour already does most of this)
+    "dark": {"social": 1, "nowhere": 1},
+    "bright": {"errands": 1},
+    # leaving vs arriving, in screen space — the same soft license the temper
+    # read takes: to leave reads homeward or escapist, to arrive reads social
+    "heading away": {"home": 1, "escape": 1},
+    "approaching the camera": {"social": 1},
+    # how they're driving — stuck-and-going is the commute, dawdling is a life
+    # with no clock on it
+    "stop and go": {"work": 1},
+    "dawdling": {"nowhere": 1},
 }
 
 TEMPERS = {
@@ -289,7 +308,8 @@ def read(features: dict) -> dict:
                         TEMPER_ORDER, "steady")
     orbit, om = _tally(ORBIT_VOTES,
                        (features.get("time_of_day"), day, kind,
-                        features.get("vibe")),
+                        features.get("vibe"), features.get("direction"),
+                        features.get("behavior"), sc.get("tempo"), sc.get("light")),
                        ORBIT_ORDER, "errands")
     return {"temper": temper, "orbit": orbit, "conviction": tm + om}
 
