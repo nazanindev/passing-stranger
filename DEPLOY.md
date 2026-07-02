@@ -10,7 +10,16 @@ DNS-only). ~$9.70/mo.
 edit locally → git push → server pulls → (restart if .py changed)
 ```
 
-Concretely:
+The whole thing, one command — pushes, pulls, restarts only if it must, then
+proves the site is back with a health check (exits non-zero if it isn't):
+
+```bash
+./deploy.sh              # the usual
+./deploy.sh --no-push    # deploy what's already on origin/main
+./deploy.sh --restart    # force a restart even on a config-only change
+```
+
+Or by hand, if you'd rather watch each step:
 
 ```bash
 git push origin main
@@ -19,8 +28,22 @@ ssh -i ~/.ssh/passingstranger_ed25519 root@46.224.44.127 \
 ```
 
 - Changed only `cams-prod.yaml` or `web/index.html`? The restart is unnecessary
-  (config and page are re-read per request).
+  (config and page are re-read per request) — `deploy.sh` detects this and skips it.
 - Changed anything in `car_stories/*.py`? Restart required (last line above).
+
+## monitoring a deploy
+
+No CI — `deploy.sh`'s final line (`OK … serving 200` or `FAIL …`) is your
+verdict. To watch by hand:
+
+```bash
+# follow the restart live (Ctrl-C to stop)
+ssh -i ~/.ssh/passingstranger_ed25519 root@46.224.44.127 'journalctl -u passing-stranger -f'
+# did it come back up?
+ssh -i ~/.ssh/passingstranger_ed25519 root@46.224.44.127 'systemctl status passing-stranger --no-pager'
+# serving end-to-end? (app + Caddy TLS)
+curl -sS -o /dev/null -w '%{http_code}\n' https://passingstranger.cam/
+```
 
 ## what lives where on the server
 
