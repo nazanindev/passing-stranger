@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from contextlib import asynccontextmanager
 import datetime as _dt
 import json
 import os
@@ -48,7 +49,18 @@ CURATOR_TOKEN = os.environ.get("CS_CURATOR_TOKEN", "")
 # Tokyo and Miami don't tell the same life minutes apart
 _narrator = Narrator()
 
-app = FastAPI()
+@asynccontextmanager
+async def _lifespan(app):
+    yield
+    # shutdown: signal every cam worker to quit so OpenCV releases its captures.
+    # the threads are daemons (they can't hold the process open), so a worker
+    # blocked in a slow cap.read() won't stall the exit — this is a clean release.
+    with _sessions_lock:
+        for s in _sessions.values():
+            s.close()
+
+
+app = FastAPI(lifespan=_lifespan)
 app.mount("/gallery-img", StaticFiles(directory=str(GALLERY)), name="gallery")
 
 # set once main() builds the uvicorn Server — the live MJPEG streams poll its
@@ -304,16 +316,6 @@ async def stream(cam: str | None = None):
 
     return StreamingResponse(gen(),
                              media_type="multipart/x-mixed-replace; boundary=frame")
-
-
-@app.on_event("shutdown")
-def _stop_sessions() -> None:
-    """Signal every cam worker to quit so OpenCV releases its captures. The
-    threads are daemons (they can't hold the process open), so a worker blocked
-    in a slow cap.read() won't stall the exit — this is just a clean release."""
-    with _sessions_lock:
-        for s in _sessions.values():
-            s.close()
 
 
 def main() -> None:
