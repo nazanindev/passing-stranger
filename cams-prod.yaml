@@ -49,42 +49,26 @@ cams:
     type: video
     source: "https://video.deldot.gov/live/KCAM187.stream/playlist.m3u8"
 
-  - id: nyc-broadway-45
-    region: nyc
-    vibe: tourist
-    tz: America/New_York
-    name: "Broadway @ 45th St"
-    location: "NYC — DOT public feed"
-    type: snapshot
-    source: "https://webcams.nyctmc.org/api/cameras/053e8995-f8cb-4d02-a659-70ac7c7da5db/image"
-    interval: 2.0
 
-  - id: nyc-fdr-oldslip
-    region: nyc
-    vibe: freeway
-    tz: America/New_York
-    name: "FDR Dr @ Old Slip"
-    location: "NYC — DOT public feed"
-    type: snapshot
-    source: "https://webcams.nyctmc.org/api/cameras/3309fba1-cc5f-483a-92bc-7d85951f1558/image"
-    interval: 2.0
 
-  - id: nyc-broadway-morris
-    region: nyc
-    vibe: downtown
-    tz: America/New_York
-    name: "Broadway @ Morris St"
-    location: "NYC — DOT public feed"
-    type: snapshot
-    source: "https://webcams.nyctmc.org/api/cameras/08328372-55a2-448a-b180-9b4bce0b8d9e/image"
-    interval: 2.0
 
-  - id: nyc-water-john
-    region: nyc
-    vibe: downtown
+
+  # NYC DOT (webcams.nyctmc.org) refuses datacenter IPs — those cams are
+  # local-run only. Florida's divas.cloud streams are open from anywhere.
+  - id: ftl-a1a
+    region: miami
+    vibe: beach
     tz: America/New_York
-    name: "Water St @ John St"
-    location: "NYC — DOT public feed"
-    type: snapshot
-    source: "https://webcams.nyctmc.org/api/cameras/ecdddb78-10be-47c6-ba27-e5d9da6b9a22/image"
-    interval: 2.0
+    name: "A1A Beachfront"
+    location: "Fort Lauderdale, FL — FDOT public feed"
+    type: video
+    source: "https://dis-se20.divas.cloud:8200/chan-12140_h/index.m3u8"
+
+  - id: sarasota-ringling
+    region: miami
+    vibe: beach
+    tz: America/New_York
+    name: "Ringling Causeway"
+    location: "Sarasota, FL — FDOT public feed"
+    type: video
+    source: "https://dis-se19.divas.cloud:8200/chan-11536_h/index.m3u8"
