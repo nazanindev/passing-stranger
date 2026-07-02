@@ -15,18 +15,31 @@ import random
 from . import correlator, style
 
 
-def _weave(rng, pool, actives):
+def _weave(rng, pool, actives, recent=None, tries=3):
     """Pick one line within the car's read: lines claimed by other reads are
     dropped; on-read and free lines stay in on equal footing (favoring the
     claimed ones concentrates picks and kills novelty). If the filter empties
-    the pool, the pool stands."""
+    the pool, the pool stands.
+
+    `recent` is the narrator's clause-level memory: a repeated *ingredient*
+    reads as repetitive even inside a brand-new sentence, so each pick rerolls
+    while it's still warm. A small pool may exhaust the retries — then the
+    repeat stands rather than fighting the pool."""
     on = [e for e in pool if correlator.claims(e) & actives]
     free = [e for e in pool if not correlator.claims(e)]
-    return rng.choice(on + free or list(pool))
+    cands = on + free or list(pool)
+    pick = rng.choice(cands)
+    if recent is not None:
+        for _ in range(tries):
+            if pick not in recent:
+                break
+            pick = rng.choice(cands)
+        recent.append(pick)
+    return pick
 
 
-def _pick(rng, pool_map, key, actives):
-    return _weave(rng, pool_map.get(key, pool_map["_"]), actives)
+def _pick(rng, pool_map, key, actives, recent=None):
+    return _weave(rng, pool_map.get(key, pool_map["_"]), actives, recent)
 
 
 class Narrator:
@@ -34,10 +47,13 @@ class Narrator:
 
     def __init__(self) -> None:
         self._cache: dict[int, dict] = {}
-        # novelty memory: the storyteller won't repeat a line it said recently —
-        # if the dice land on one, it rerolls (~an hour of stories at busy cams)
         from collections import deque
-        self._recent: deque = deque(maxlen=220)
+        # novelty memory, two grains: whole lines get a long memory (a story
+        # shouldn't come back for an hour), ingredients a short one — a warm
+        # clause in a fresh sentence reads as a rerun, but only briefly; a
+        # little repetition is the texture of a real street, not a bug
+        self._recent: deque = deque(maxlen=220)   # assembled lines
+        self._clauses: deque = deque(maxlen=60)   # individual picks (~a dozen stories)
 
     def _fresh(self, roll, tries: int = 10):
         """Reroll until the line hasn't been said recently (or give up)."""
@@ -48,10 +64,6 @@ class Narrator:
             line = roll()
         self._recent.append(line)
         return line
-
-    @property
-    def dry(self) -> bool:
-        return False
 
     def thought(self, features: dict, kind: str) -> list[str]:
         """The raw notes the system is 'seeing' — revealed one by one, live."""
@@ -87,7 +99,9 @@ class Narrator:
         chips.append(f"reads {r['temper']} · {r['orbit']}")  # the verdict, last
         return [c for c in chips if c]
 
-    def narrate(self, track_id: int, features: dict) -> dict:
+    def narrate(self, track_id, features: dict) -> dict:
+        # track_id is any hashable key — cam sessions pass (session, id) tuples
+        # so one shared narrator can serve every cam without souls colliding
         if track_id in self._cache:
             return self._cache[track_id]
 
@@ -101,8 +115,12 @@ class Narrator:
         # what the street offers this car, if anything
         scene_phrases = [p for t in features.get("scene_tags", ())
                          for p in style.SCENE_PHRASE.get(t, ())]
-        scene_phrase = rng.choice(scene_phrases) if scene_phrases else ""
+        scene_phrase = (_weave(rng, scene_phrases, actives, self._clauses)
+                        if scene_phrases else "")
         other = features.get("other", "")
+        # the place votes too: this cam's region slips a local destination
+        # into the pools now and then (a Wawa run only happens near a Wawa)
+        flavor = style.REGION_FLAVOR.get(features.get("region", ""), {})
 
         # length is earned: one clause unless the evidence itself is notable —
         # visible behavior, a special body, or an emphatic read
@@ -114,9 +132,12 @@ class Narrator:
             walk = features.get("mood", "ambling")  # gait, not the correlator's read
 
             def roll_person():
-                attrs = {"who": _weave(rng, style.PERSON_WHO, actives),
-                         "mood": _weave(rng, style.PERSON_MOOD[walk], actives),
-                         "toward": _weave(rng, style.TOWARD, actives)}
+                attrs = {"who": _weave(rng, style.PERSON_WHO, actives, self._clauses),
+                         "mood": _weave(rng, style.PERSON_MOOD[walk], actives,
+                                        self._clauses),
+                         "toward": _weave(rng, style.TOWARD
+                                          + flavor.get("toward", []), actives,
+                                          self._clauses)}
                 if walk == "ambling" and r["conviction"] < 4:   # unremarkable gait
                     return attrs[rng.choice(("mood", "mood", "who"))]
                 return rng.choice(style.PERSON_TEMPLATES).format(**attrs)
@@ -145,20 +166,27 @@ class Narrator:
                     # a kind with a visible telos: the job sets the feeling; behavior
                     # folds into speed so a hurrying cab is never "running from something"
                     key = style.BEH_TO_SPEED.get(beh, features["speed"])
-                    emotion = _pick(rng, style.KIND_EMOTION[kind], key, actives)
+                    emotion = _pick(rng, style.KIND_EMOTION[kind], key, actives,
+                                    self._clauses)
                 elif beh in style.BEHAVIOR_EMOTION:
-                    emotion = _weave(rng, style.BEHAVIOR_EMOTION[beh], actives)
+                    emotion = _weave(rng, style.BEHAVIOR_EMOTION[beh], actives,
+                                     self._clauses)
                 else:
-                    emotion = _pick(rng, style.EMOTION, features["speed"], actives)
-                purpose = (rng.choice(style.KIND_PURPOSE[kind])
+                    emotion = _pick(rng, style.EMOTION, features["speed"], actives,
+                                    self._clauses)
+                purpose = (_weave(rng, style.KIND_PURPOSE[kind], actives, self._clauses)
                            if kind in style.KIND_PURPOSE
-                           else _pick(rng, style.PURPOSE, features["time_of_day"], actives))
+                           else _weave(rng, style.PURPOSE.get(features["time_of_day"],
+                                                              style.PURPOSE["_"])
+                                       + flavor.get("purpose", []), actives,
+                                       self._clauses))
                 attrs = {
-                    "who": _weave(rng, style.WHO[kind], actives),
+                    "who": _weave(rng, style.WHO[kind], actives, self._clauses),
                     "emotion": emotion,
                     "purpose": purpose,
-                    "toward": _weave(rng, style.KIND_TOWARD.get(kind, style.TOWARD),
-                                     actives),
+                    "toward": _weave(rng, style.KIND_TOWARD.get(
+                        kind, style.TOWARD + flavor.get("toward", [])), actives,
+                        self._clauses),
                     "origin": origin,
                     "scene_phrase": scene_phrase,
                     "other": other,

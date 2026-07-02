@@ -1,16 +1,13 @@
-"""Draw boxes + captions and write annotated snapshots."""
+"""Bake boxes, thinking-chips, and stories onto the live frame."""
 
 from __future__ import annotations
 
-import os
 import textwrap
 import time
 
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-
-_FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 _FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Georgia.ttf",
@@ -68,41 +65,6 @@ def _load_mono(size: int):
 _MONO = _load_mono(14)   # the "thinking" font
 
 
-def _draw_caption(frame: np.ndarray, lines: list[str], anchor: tuple[int, int]) -> None:
-    x, y = anchor
-    pad = 6
-    sizes = [cv2.getTextSize(ln, _FONT, 0.5, 1)[0] for ln in lines]
-    bw = max(w for w, _ in sizes) + pad * 2
-    bh = sum(h for _, h in sizes) + pad * (len(lines) + 1)
-    y = max(0, y - bh)
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x, y), (x + bw, y + bh), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
-    cy = y + pad
-    for ln, (_, h) in zip(lines, sizes):
-        cy += h
-        cv2.putText(frame, ln, (x + pad, cy), _FONT, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-        cy += pad
-
-
-def annotate(frame: np.ndarray, box, label: str, story: str) -> np.ndarray:
-    out = frame.copy()
-    x1, y1, x2, y2 = box
-    cv2.rectangle(out, (x1, y1), (x2, y2), (60, 200, 255), 2)
-    cv2.putText(out, label, (x1, max(14, y1 - 6)), _FONT, 0.5, (60, 200, 255), 1, cv2.LINE_AA)
-    lines = textwrap.wrap(story, width=52) or [""]
-    _draw_caption(out, lines, anchor=(x1, y2 + 4 + len(lines) * 20))
-    return out
-
-
-def save_snapshot(frame: np.ndarray, out_dir: str, track_id: int, archetype: str) -> str:
-    os.makedirs(out_dir, exist_ok=True)
-    slug = "".join(c if c.isalnum() else "-" for c in archetype.lower())[:30] or "car"
-    path = os.path.join(out_dir, f"car-{track_id:03d}-{slug}.jpg")
-    cv2.imwrite(path, frame)
-    return path
-
-
 def _overlaps(a, b) -> bool:
     return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
 
@@ -155,18 +117,27 @@ def draw_live(frame: np.ndarray, overlays: list[dict]) -> np.ndarray:
         lh = max((b[3] - b[1]) for b in dims)
         maxw = max((b[2] - b[0]) for b in dims)
         total = lh * len(lines) + gap * (len(lines) - 1)
-        tx = max(6, min(x1 + 2, W - maxw - 6))
-        ty = y2 + 10
-        if ty + total > H - 6:                             # prefer above if no room below
-            ty = max(6, y1 - total - 10)
+        # candidates all tethered to the box — below, above, beside, then small
+        # downward nudges. A story that can't sit by its car sits as close as
+        # it can; it never flies to the far side of the frame (orphaned text
+        # at the top of nowhere reads as a glitch).
         step = lh + gap + 4
-        for _ in range(14):                                # nudge down until clear
-            rect = (tx - 2, ty - 2, tx + maxw + 2, ty + total + 2)
-            if not any(_overlaps(rect, p) for p in placed):
+        raw = [(x1 + 2, y2 + 10), (x1 + 2, y1 - total - 10),
+               (x2 + 12, y1 + 2), (x1 - maxw - 12, y1 + 2)]
+        raw += [(x1 + 2, y2 + 10 + step * k) for k in range(1, 7)]
+        cands = [(max(6, min(cx_, W - maxw - 6)), max(6, min(cy_, H - total - 6)))
+                 for cx_, cy_ in raw]
+
+        def _crowding(c):
+            r = (c[0] - 2, c[1] - 2, c[0] + maxw + 2, c[1] + total + 2)
+            return sum(max(0, min(r[2], p[2]) - max(r[0], p[0]))
+                       * max(0, min(r[3], p[3]) - max(r[1], p[1])) for p in placed)
+
+        tx, ty = min(cands, key=_crowding)                 # least overlap wins
+        for c in cands:                                    # but a clear spot wins outright
+            if _crowding(c) == 0:
+                tx, ty = c
                 break
-            ty += step
-            if ty + total > H - 6:
-                ty = 6
         # ease toward the target instead of snapping — unless it jumped far
         # (new slot after a collision), in which case follow it immediately
         prev = _ANCHORS.get(o["id"])

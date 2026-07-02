@@ -19,14 +19,16 @@ class NarrationManager:
     def __init__(self, narrator: Narrator, min_frames: int = 12,
                  clock: str = "unknown", max_shown: int = 4,
                  reveal_every: int = 2, locale: str = "default",
-                 vibe: str = "") -> None:
-        self.narrator = narrator
+                 vibe: str = "", region: str = "") -> None:
+        self.narrator = narrator          # may be shared across cam sessions —
+        self._salt = id(self)             # so their track ids must not collide
         self.min_frames = min_frames
         self.clock = clock
         self.max_shown = max_shown        # how many cars carry an overlay at once
         self.reveal_every = reveal_every  # frames per revealed observation
         self.locale = locale              # grounds reads like yellow-car→cab
         self.vibe = vibe                  # the place's character (beach, tourist…)
+        self.region = region              # local flavor (a Wawa run needs a Wawa)
 
     def _behavior(self, t: Track, pack_median: float) -> str:
         """A driving-behavior read, relative to the other cars on screen."""
@@ -49,6 +51,17 @@ class NarrationManager:
             return "hurrying"
         return "ambling"
 
+    @staticmethod
+    def _twin(a: tuple, b: tuple) -> float:
+        """Overlap over the smaller box — near-concentric double-detections
+        score high even when IoU wouldn't."""
+        iw = min(a[2], b[2]) - max(a[0], b[0])
+        ih = min(a[3], b[3]) - max(a[1], b[1])
+        if iw <= 0 or ih <= 0:
+            return 0.0
+        small = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+        return iw * ih / small if small > 0 else 0.0
+
     def _neighbor(self, t: Track, tracks: dict[int, Track]) -> str:
         """Another car actually sharing the frame — for the pack story shape."""
         best, bd = None, 1e9
@@ -68,7 +81,26 @@ class NarrationManager:
     def step(self, tracks: dict[int, Track], fps: float,
              scene: dict | None = None) -> list[dict]:
         scene = dict(scene or {})
-        shown = sorted(tracks.values(), key=lambda t: -t.rel_size)[:self.max_shown]
+        # one car, one soul: a tracker twin riding the same box (glare, id switch)
+        # never gets its own read — people may overlap cars freely, though
+        cur = max((t.last_frame for t in tracks.values()), default=0)
+        shown: list[Track] = []
+        for t in sorted(tracks.values(), key=lambda t: -t.rel_size):
+            # the tracker remembers a gone car for ~60 frames (occlusion grace);
+            # a ghost must not keep its box and story on screen that long
+            if cur - t.last_frame > 2:
+                continue
+            # a soul needs a body: a track the detector itself half-doubts
+            # (glare ghosts, stubborn shadows) never carries an overlay
+            if t.median_conf() < 0.35:
+                continue
+            person = t.cls_name == "person"
+            if any(self._twin(t.last_box, k.last_box) > 0.55 for k in shown
+                   if (k.cls_name == "person") == person):
+                continue
+            shown.append(t)
+            if len(shown) == self.max_shown:
+                break
         speeds = [t.avg_speed() for t in tracks.values()
                   if t.cls_name != "person" and t.frames_seen >= 4]
         pack_median = statistics.median(speeds) if speeds else 0.0
@@ -94,6 +126,7 @@ class NarrationManager:
             feats = t.features(fps, clock)
             feats["locale"] = self.locale
             feats["vibe"] = self.vibe
+            feats["region"] = self.region
             feats["scene"] = scene
             feats["scene_tags"] = scene_tags
             if t.cls_name == "person":
@@ -102,7 +135,7 @@ class NarrationManager:
                 feats["behavior"] = self._behavior(t, pack_median)
                 feats["other"] = self._neighbor(t, tracks)
             if t.frames_seen >= self.min_frames:
-                r = self.narrator.narrate(t.track_id, feats)
+                r = self.narrator.narrate((self._salt, t.track_id), feats)
                 overlays.append({"id": t.track_id, "box": list(t.last_box),
                                  "stage": "resolved", "lines": r["lines"]})
             else:

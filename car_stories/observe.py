@@ -1,9 +1,8 @@
 """Detect + track vehicles and accumulate the *real* observable features.
 
-Reusable core. `Tracker` processes one frame at a time (so it drives live
-streams and snapshot cams alike); `observe()` is a convenience generator for the
-batch CLI. The narrator (and, later, a learned taste-model) consumes the
-per-track feature dicts produced here.
+`Tracker` processes one frame at a time, so it drives live streams and
+snapshot cams alike. The narrator consumes the per-track feature dicts
+produced here.
 """
 
 from __future__ import annotations
@@ -36,11 +35,17 @@ class Track:
     rel_x: float = 0.5             # center x / frame width — which lane
     fine_type: str = ""            # ImageNet body-type, only when the crop is big
     class_votes: dict = field(default_factory=dict)  # COCO-class tally → majority vote
+    confs: list[float] = field(default_factory=list)  # detector's own certainty
     narrated: bool = False
 
     @property
     def frames_seen(self) -> int:
         return len(self.centers)
+
+    def median_conf(self) -> float:
+        if not self.confs:
+            return 1.0
+        return float(np.median(self.confs))
 
     def direction(self) -> str:
         """Net travel direction in screen space (x→right, y→down)."""
@@ -153,6 +158,9 @@ class Tracker:
             imgsz=self.imgsz,
             device=self.device,
             conf=0.25,
+            # NMS is per-class by default: headlight glare reads as a car and a
+            # truck at once, and both boxes survive — two souls on one windshield
+            agnostic_nms=True,
             verbose=False,
         )
         boxes = results[0].boxes
@@ -162,9 +170,10 @@ class Tracker:
         ids = boxes.id.int().tolist()
         xyxy = boxes.xyxy.cpu().numpy().astype(int)
         clss = boxes.cls.int().tolist()
+        confs = boxes.conf.cpu().tolist()
 
         present = set()
-        for tid, box, cls in zip(ids, xyxy, clss):
+        for tid, box, cls, conf in zip(ids, xyxy, clss, confs):
             present.add(tid)
             x1, y1, x2, y2 = (int(v) for v in box)
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
@@ -175,6 +184,7 @@ class Tracker:
                 self.tracks[tid] = tr
             tr.class_votes[name] = tr.class_votes.get(name, 0) + 1
             tr.cls_name = max(tr.class_votes, key=tr.class_votes.get)  # majority over time
+            tr.confs.append(float(conf))
             tr.centers.append((cx, cy))
             tr.last_frame = idx
             tr.last_box = (x1, y1, x2, y2)
@@ -247,10 +257,3 @@ def iter_snapshots(url: str, interval: float = 1.0, stop=None):
             stop.wait(interval)
         else:
             time.sleep(interval)
-
-
-def observe(source, max_frames: int | None = None):
-    """Convenience generator for the batch CLI: yield (idx, frame, tracks)."""
-    tracker = Tracker()
-    for idx, frame in enumerate(iter_video(source, loop=False, max_frames=max_frames)):
-        yield idx, frame, tracker.update(frame, idx)

@@ -87,7 +87,11 @@ WHO = {
                 "a nurse coming off nights", "a retiree who downsized the car too",
                 "paid off as of last month", "a barista with a second act",
                 "someone who likes small cars, no story there",
-                "an organist, believe it or not", "a grad student defending in spring"],
+                "an organist, believe it or not", "a grad student defending in spring",
+                "a painter between commissions", "a realtor between showings",
+                "a home-care aide on the third visit of four",
+                "a poet with a day job", "an accountant who did the math on gas",
+                "a substitute teacher, new school every week"],
     "sedan": ["someone ordinary, which is to say infinite", "a commuter",
               "nobody in particular", "a regular",
               "the middle of the bell curve, driving",
@@ -95,7 +99,13 @@ WHO = {
               "a middle manager rehearsing kindness", "half of a long-distance thing",
               "a notary with a full afternoon", "somebody's landlord, off the clock",
               "an inspector of something obscure", "a birdwatcher out of season",
-              "a wedding guest who left early"],
+              "a wedding guest who left early",
+              "a regional manager with a trunk full of samples",
+              "a quarterly-numbers kind of morning",
+              "a session musician nobody waves at anymore",
+              "a mother with twenty minutes to herself",
+              "an old friend from a life that didn't happen",   # the Whitman line
+              "a sculptor who welds for money"],
     "truck": ["a tradesman", "a hauler by trade", "someone who works with his hands",
               "a life of loading and unloading", "a bed full of somebody's weekend",
               "paid by the job, not the hour", "a beekeeper, oddly",
@@ -112,11 +122,13 @@ WHO = {
     "mover": ["starting over somewhere", "a whole life in boxes", "moving day, again",
               "an address about to be past tense"],
     "wanderer": ["no fixed address", "chasing summer", "running away in comfort",
-                 "retired into motion"],
+                 "retired into motion", "light-hearted, taking to the open road"],
     "showoff": ["wants you to look", "young money, or faking it", "weekend adrenaline",
-                "the payment's due on the 1st", "louder than necessary, on purpose"],
+                "the payment's due on the 1st", "louder than necessary, on purpose",
+                "a rockstar between reunions", "the divorce settlement, driving"],
     "wealth": ["someone being driven", "an occasion", "money that stays quiet",
-               "tinted windows and a schedule"],
+               "tinted windows and a schedule", "a deal closing by phone",
+               "a board seat running late"],
     "cabbie": ["a stranger in the back", "someone else's hurry", "the city's confessional",
                "forty stories a shift, none theirs", "a map of the city kept in the hands"],
     "duty": ["someone's worst day", "on the clock for a crisis", "paid to arrive fast",
@@ -156,7 +168,8 @@ KIND_EMOTION = {  # keyed by speed (behavior folds into speed via BEH_TO_SPEED)
     },
     "trucker": {
         "racing": ["a deadline two states wide", "making up an hour lost at the scales"],
-        "cruising": ["dead center of a long haul", "coffee, centerline, repeat"],
+        "cruising": ["dead center of a long haul", "coffee, centerline, repeat",
+                     "distance availing nothing"],
         "crawling": ["fourteen gears and no room to use them",
                      "the city's revenge on a highway animal"],
         "_": ["logbook says stop"],
@@ -223,7 +236,8 @@ BUS_LIVES = ["late for work", "going home", "asleep by the window",
              "an umbrella on a clear day", "two crosswords ahead of the seatmate",
              "a cake box held level, mostly", "reading over a stranger's shoulder",
              # the rationed ache
-             "texting someone they shouldn't", "watching their stop go by on purpose"]
+             "texting someone they shouldn't", "watching their stop go by on purpose",
+             "looking upon a stranger, longingly", "containing multitudes, quietly"]
 BUS_COUNT = 2
 
 # school bus → the lives are small and the stakes are enormous
@@ -254,7 +268,8 @@ EMOTION = {  # by speed — mostly mundane; one ache each, rationed.
                  "keeping a comfortable distance", "signaling early, like they teach",
                  "at peace with the speed limit", "a full tank and no opinions",
                  "the commute on autopilot", "letting the fast ones pass",
-                 "alone on purpose"],
+                 "alone on purpose",
+                 "fluid, affectionate, chaste"],   # the collage, rationed
     "crawling": ["stuck and patient", "done with today", "waiting it out",
                  "counting brake lights", "resigned to the clock",
                  "one podcast from peace", "in line like everyone else",
@@ -262,10 +277,11 @@ EMOTION = {  # by speed — mostly mundane; one ache each, rationed.
                  "close enough to read bumper stickers",
                  "a car length gained, a car length lost",
                  "patience by necessity", "watching the pedestrians win",
-                 "too tired to arrive"],
+                 "too tired to arrive", "the procession, endless"],
     "_": ["not ready to go", "in no hurry to get out", "idling on it",
           "waiting on someone's front door", "double-parked and betting on it",
-          "finishing the song first"],
+          "finishing the song first",
+          "to wait, not doubting", "thinking of someone, sitting alone"],
 }
 
 BEHAVIOR_EMOTION = {  # how they drive → how they feel (overrides plain speed)
@@ -319,17 +335,19 @@ PERSON_WHO = ["someone late for something", "a person with nowhere to be",
               "a stranger everyone here has seen before",
               "a retired teacher who knows this block",
               "someone walking off a big lunch",
-              "a new parent stealing an hour"]
+              "a new parent stealing an hour",
+              "someone sought, without knowing it"]
 PERSON_MOOD = {
     "waiting": ["waiting on someone", "killing time", "checking the time again",
                 "not sure they're in the right place",
                 "reading the same text again",
-                "early for once, unsure what to do with it"],
+                "early for once, unsure what to do with it",
+                "stopped somewhere, waiting"],
     "hurrying": ["late and moving", "half-running", "weaving through the slow",
                  "in shoes not meant for this", "the bus is now or never"],
     "ambling": ["in no rush", "taking the long way", "lost in a thought",
                 "window-shopping the closed stores", "walking off a phone call",
-                "practicing a conversation"],
+                "practicing a conversation", "sauntering the pavement"],
 }
 PERSON_TEMPLATES = ["{who}, {mood}", "{who} · {toward}", "{mood}, {toward}",
                     "{who} · {mood}"]
@@ -347,12 +365,15 @@ TOWARD = ["toward home", "to the recital", "to the night shift", "home, finally"
           "a few blocks more",
           # the rationed ache
           "to see his mother", "to the appointment they rescheduled twice",
-          "toward a kitchen with the light still on"]
+          "toward a kitchen with the light still on",
+          "certain they'll pass this way again",
+          "toward a life of joy, somewhere surely"]
 
 ARCH_ADJ = ["Reluctant", "Late", "Unhurried", "Homebound", "Patient",
             "Punctual", "Stubborn", "Quiet", "Reasonable", "Weekday",
             "Almost-There", "Second-Guessing", "Borrowed", "Faithful",
-            "Restless", "Overdue", "Tender", "Turned-Around"]
+            "Restless", "Overdue", "Tender", "Turned-Around",
+            "Sought", "Recall'd", "Glimpsed"]
 ARCH_NOUN = ["Commuter", "Visitor", "Regular", "Neighbor", "Local",
              "Errand-Runner", "Carpooler", "Latecomer", "Optimist",
              "Middle Child", "Caretaker", "Provider", "Understudy",
@@ -397,14 +418,72 @@ TEMPLATES_PACK = [
     "{emotion}, pacing {other}",
     "trading lanes with {other} · {toward}",
     "{who}, following {other} without meaning to",
+    "flitting by {other}, as of a dream",
+    "what is it then between them and {other}",
+    "picking {other} out by secret signs",
 ]
+
+# the place votes too — destinations that only exist *here*. Chains are fair
+# game where a name isn't: a Wawa is a place, not a person, and nothing is more
+# mundane than the store the locals have stopped seeing. Merged (thinly) into
+# TOWARD / PURPOSE by region, so the local line lands occasionally, not always.
+REGION_FLAVOR = {
+    "philly": {  # Delaware / Philly orbit
+        "toward": ["to the Wawa", "to the Acme before it closes",
+                   "down toward the shore, off-season"],
+        "purpose": ["a Wawa run", "a hoagie, half now half later"],
+    },
+    "nyc": {  # the hometown poet gets his borough back
+        "toward": ["to the good bodega", "into a parking spot they won't surrender",
+                   "crosstown the long way", "toward Brooklyn, of ample hills"],
+        "purpose": ["the usual bagel order", "moving the car for street cleaning",
+                    "the ferry, out of habit"],
+    },
+    "miami": {
+        "toward": ["over the causeway", "to Publix"],
+        "purpose": ["a cafecito at the window", "Publix, then maybe the beach"],
+    },
+    "socal": {
+        "toward": ["to In-N-Out", "the 405, eventually"],
+        "purpose": ["tacos from the same truck as always"],
+    },
+    "sandiego": {
+        "toward": ["down to the water before sunset", "to the taco shop, the real one"],
+        "purpose": ["a California burrito, no substitutions"],
+    },
+    "sacramento": {
+        "toward": ["out toward the river", "to Raley's"],
+        "purpose": ["the farmers market, early"],
+    },
+    "kingston": {
+        "toward": ["up Constant Spring Road", "to Juici for a patty"],
+        "purpose": ["a patty and cocoa bread", "beating the Half Way Tree traffic, badly"],
+    },
+    "bangkok": {
+        "toward": ["to 7-Eleven, the near one", "through the soi shortcut"],
+        "purpose": ["a 7-Eleven toastie", "the night market, before the crowd"],
+    },
+    "tokyo": {
+        "toward": ["to the konbini, the usual one", "to the station, unhurried"],
+        "purpose": ["a konbini stop", "home before the last train, easily"],
+    },
+    "london": {
+        "toward": ["to the big Tesco", "round the chippy"],
+        "purpose": ["a meal deal", "the school run, the long way round"],
+    },
+    "wyoming": {
+        "toward": ["into town for the mail", "out past the elk fence"],
+        "purpose": ["the feed store", "a tourist-season shift"],
+    },
+}
 
 SCENE_PHRASE = {  # keyed by the scene tags narration.py derives from the stream
     "an empty street": ["the only one on the road", "no audience but the camera",
                         "the street to themselves"],
     "a quiet road": ["one of the few out", "the road mostly theirs"],
     "the thick of it": ["anonymous in the current", "one of the many",
-                        "swimming with the school"],
+                        "swimming with the school", "flitting by each other",
+                        "among the multitude"],
     "the crawl": ["one brake light among hundreds", "boxed in on every side",
                   "part of the long red river"],
     "dark": ["headlights doing the seeing", "past the lit windows"],

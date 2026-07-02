@@ -17,7 +17,7 @@ import time
 
 import cv2
 import yaml
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -31,6 +31,10 @@ WEB = pathlib.Path(__file__).resolve().parent / "web"
 GALLERY = ROOT / "out" / "gallery"
 GALLERY.mkdir(parents=True, exist_ok=True)
 MAX_WIDTH = 960
+
+# one storyteller for the whole house: its novelty memory spans cams, so
+# Tokyo and Miami don't tell the same life minutes apart
+_narrator = Narrator()
 
 app = FastAPI()
 app.mount("/gallery-img", StaticFiles(directory=str(GALLERY)), name="gallery")
@@ -107,10 +111,11 @@ class Session:
     def _run(self) -> None:
         tracker = Tracker(classify=True)   # fine body-type on close crops
         default_min = 4 if self.cam.get("type") == "snapshot" else 12
-        nm = NarrationManager(Narrator(),
+        nm = NarrationManager(_narrator,
                               min_frames=self.cam.get("min_frames", default_min),
                               locale=self.cam.get("locale", "default"),
-                              vibe=self.cam.get("vibe", ""))
+                              vibe=self.cam.get("vibe", ""),
+                              region=self.cam.get("region", ""))
         for idx, frame in enumerate(_frames(self.cam, self.stop)):
             if self.stop.is_set():
                 break
@@ -147,8 +152,13 @@ async def gallery():
 
 
 @app.post("/clip")
-async def clip(payload: dict = Body(...)):
-    """Save the frame the user clipped (base64 JPEG from the browser)."""
+async def clip(request: Request, payload: dict = Body(...)):
+    """Save the frame the curator clipped (base64 JPEG from the browser).
+    The gallery is curated by one person: only loopback may clip. (Behind a
+    reverse proxy every client looks like loopback — the deploy must put this
+    route behind auth or not proxy it at all.)"""
+    if request.client and request.client.host not in ("127.0.0.1", "::1"):
+        return JSONResponse({"error": "the gallery is curated"}, status_code=403)
     data = payload.get("jpeg", "")
     if "," in data:
         data = data.split(",", 1)[1]
