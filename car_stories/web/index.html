@@ -186,9 +186,10 @@ async function init(){
   }
   const g=document.createElement('button');
   g.textContent='the gallery'; g.className='gal';
-  g.onclick=()=>{setActive(g); showGallery();};
+  g.onclick=()=>{setActive(g); showGallery(); history.replaceState(null,'','#gallery');};
   nav.appendChild(g);
-  if(first){first.classList.add('active'); connect(currentCam);}
+  if(location.hash==='#gallery'){setActive(g); showGallery();}
+  else if(first){first.classList.add('active'); connect(currentCam);}
   pollGallery(); setInterval(pollGallery, 3000);
 }
 init();
