@@ -52,6 +52,19 @@ class NarrationManager:
         return "ambling"
 
     @staticmethod
+    def _parked(t: Track) -> bool:
+        """A vehicle that never went anywhere: near-zero net travel over a
+        sustained watch, and still now. Parked cars aren't passing strangers —
+        they're scenery, and re-reading the same one into a new life every time
+        the tracker re-acquires it is what kills the vibe. So they get no overlay
+        at all, like the mailbox. A car merely stopped at a light drove *in* —
+        its net displacement is real — so it keeps its soul."""
+        return (t.cls_name != "person"
+                and t.frames_seen >= 6
+                and t.direction() in ("stationary", "barely moving")
+                and t.avg_speed() < 1.5)
+
+    @staticmethod
     def _twin(a: tuple, b: tuple) -> float:
         """Overlap over the smaller box — near-concentric double-detections
         score high even when IoU wouldn't."""
@@ -61,22 +74,6 @@ class NarrationManager:
             return 0.0
         small = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
         return iw * ih / small if small > 0 else 0.0
-
-    def _neighbor(self, t: Track, tracks: dict[int, Track]) -> str:
-        """Another car actually sharing the frame — for the pack story shape."""
-        best, bd = None, 1e9
-        for o in tracks.values():
-            if (o.track_id == t.track_id or o.cls_name == "person"
-                    or o.color in ("unknown", "") or not o.centers):
-                continue
-            (x, y), (a, b) = t.centers[-1], o.centers[-1]
-            d = abs(x - a) + abs(y - b)
-            if d < bd:
-                bd, best = d, o
-        if best is not None and bd < 420:
-            noun = {"motorcycle": "bike"}.get(best.cls_name, best.cls_name)
-            return f"the {best.color} {noun}"
-        return ""
 
     def step(self, tracks: dict[int, Track], fps: float,
              scene: dict | None = None) -> list[dict]:
@@ -90,10 +87,13 @@ class NarrationManager:
             # a ghost must not keep its box and story on screen that long
             if cur - t.last_frame > 2:
                 continue
-            # a soul needs a body: a track the detector itself half-doubts
-            # (glare ghosts, stubborn shadows) never carries an overlay
-            if t.median_conf() < 0.35:
+            # a parked car is scenery, not a passing stranger — no overlay, and
+            # so no new life rolled each time it's re-acquired
+            if self._parked(t):
                 continue
+            # note: we no longer cull a low-confidence track here — a shape the
+            # detector half-doubts (the lamppost read as a person) is KEPT and
+            # thought about out loud. it just never earns a resolved story below.
             person = t.cls_name == "person"
             if any(self._twin(t.last_box, k.last_box) > 0.55 for k in shown
                    if (k.cls_name == "person") == person):
@@ -133,14 +133,18 @@ class NarrationManager:
                 feats["mood"] = self._person_mood(t)
             else:
                 feats["behavior"] = self._behavior(t, pack_median)
-                feats["other"] = self._neighbor(t, tracks)
-            if t.frames_seen >= self.min_frames:
+            # a story is earned only once the read is both long enough AND sure
+            # enough — a half-doubted shape keeps thinking (and second-guessing
+            # itself) forever rather than being handed a soul it didn't earn
+            if t.frames_seen >= self.min_frames and t.median_conf() >= 0.35:
                 r = self.narrator.narrate((self._salt, t.track_id), feats)
                 overlays.append({"id": t.track_id, "box": list(t.last_box),
                                  "stage": "resolved", "lines": r["lines"]})
             else:
-                chips = self.narrator.thought(feats, style.kind_of(feats))
-                reveal = min(len(chips), 1 + t.frames_seen // self.reveal_every)
+                chips = self.narrator.thought((self._salt, t.track_id), feats,
+                                              style.kind_of(feats), t.frames_seen,
+                                              self.reveal_every)
                 overlays.append({"id": t.track_id, "box": list(t.last_box),
-                                 "stage": "thinking", "chips": chips[:reveal]})
+                                 "stage": "thinking", "chips": chips})
+        self.narrator.reap(self._salt, set(tracks))   # forget vanished tracks
         return overlays

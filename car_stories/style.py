@@ -67,9 +67,51 @@ def kind_of(features: dict) -> str:
     return {"big": "hauler", "small": "compact"}.get(features["size"], "sedan")
 
 
-# how the thinking-chips label a heuristic read (committed — the machine
-# doesn't hedge; being confidently wrong is part of the piece)
+# how the thinking-chips label a heuristic read. the label is a guess; how
+# *sure* the machine sounds saying it is HEDGE's job (below).
 KIND_LABEL = {"cabbie": "taxi", "kids": "school bus"}
+
+
+# --- the machine's certainty, turned to voice ---------------------------------
+# the detector reports its own confidence per detection; the thinking-chips wear
+# it. a shaky read hedges out loud, a firm one commits. being wrong is still
+# part of the piece — but now you can hear it doubting. `{a}` is the subject
+# phrase, e.g. "a taxi", "a person".
+HEDGE = {
+    "low":  ["maybe {a}?", "{a}, I think?", "…{a}?", "a shape — {a}?",
+             "hard to tell. {a}?", "{a}, if that"],
+    "mid":  ["{a}, probably", "looks like {a}", "{a}, I'd say", "{a}, near enough",
+             "{a}, most likely"],
+    "high": ["{a}", "{a}", "{a}", "{a}, clearly", "{a}, no question"],
+}
+
+# which observations the machine is willing to take back once a sharper look
+# overrules them. the rest read as fixed jottings — a live stream of guesses
+# that only ever corrects the things worth correcting.
+REVISABLE = {"id", "color"}
+
+# it catches itself: a guess already voiced, corrected as the read sharpens
+# (a closer crop resolves the body, the class vote flips, the color firms up).
+# `{new}` is the corrected chip.
+REVISION = ["— no, {new}", "— {new}, actually", "…make that {new}",
+            "wait — {new}", "no: {new}", "correction — {new}"]
+
+# not a correction but a firming: the same guess, now said with a straight back
+# as the confidence climbs. `{a}` is the (unchanged) subject phrase.
+CONFIRM = ["— yes, {a}", "{a}, definitely", "settled: {a}", "— {a} after all",
+           "no, it is {a}"]
+
+# the classic traffic-cam false positive: something that never moves, read as a
+# person. NOT culled — kept, and then doubted. when a "person" holds perfectly
+# still frame after frame, the machine stops believing in the soul and names the
+# furniture instead. `{thing}` fills from here.
+STREET_FURNITURE = ["a mailbox", "a street lamp", "a parking meter",
+                    "a fire hydrant", "a newspaper box", "a trash can",
+                    "a bollard", "a signpost", "a phone booth", "a standpipe",
+                    "a mannequin in a window", "a sandwich board"]
+FURNITURE_DOUBT = ["hasn't moved — {thing}?", "still hasn't budged. {thing}?",
+                   "not a soul — {thing}, maybe", "frozen. just {thing}",
+                   "no, nobody's there — {thing}"]
 
 
 # who they are — the association per kind (your call)
@@ -413,15 +455,10 @@ TEMPLATES_SCENE = [
     "{who} · {scene_phrase}",
 ]
 
-# two strangers, one frame — {other} is another car actually on screen
-TEMPLATES_PACK = [
-    "{emotion}, pacing {other}",
-    "trading lanes with {other} · {toward}",
-    "{who}, following {other} without meaning to",
-    "flitting by {other}, as of a dream",
-    "what is it then between them and {other}",
-    "picking {other} out by secret signs",
-]
+# (a "pack" shape once referenced another car by color — "trading lanes with the
+# silver bike" — but nothing visually ties the story to that car, and there may
+# be several silver ones, so the reference never lands. Removed: a clause may not
+# point at something the viewer can't locate in the frame.)
 
 # the place votes too — destinations that only exist *here*. Chains are fair
 # game where a name isn't: a Wawa is a place, not a person, and nothing is more

@@ -124,7 +124,7 @@ class Session:
 
     def _run(self) -> None:
         tracker = Tracker(model_path=MODEL, classify=CLASSIFY, imgsz=IMGSZ)
-        default_min = 4 if self.cam.get("type") == "snapshot" else 12
+        default_min = 4 if self.cam.get("type") == "snapshot" else 16
         nm = NarrationManager(_narrator,
                               min_frames=self.cam.get("min_frames", default_min),
                               locale=self.cam.get("locale", "default"),

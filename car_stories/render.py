@@ -97,7 +97,9 @@ def draw_live(frame: np.ndarray, overlays: list[dict]) -> np.ndarray:
         ac = PALETTE[o["id"] % len(PALETTE)]
         if o.get("stage") == "thinking":
             font = _MONO
-            lines = [f"· {c}" for c in o.get("chips", [])]
+            # the thinking log only grows and corrects itself at the end, so
+            # show the tail — the latest guesses and any second-guessing
+            lines = [f"· {c}" for c in o.get("chips", [])[-5:]]
             if not lines:
                 continue
             if blink:

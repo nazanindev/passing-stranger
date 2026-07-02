@@ -14,6 +14,17 @@ import random
 
 from . import correlator, style
 
+_BANDS = ("low", "mid", "high")
+
+
+def _band(conf: float) -> str:
+    """The detector's certainty, bucketed into a register the voice can wear."""
+    if conf < 0.45:
+        return "low"
+    if conf < 0.7:
+        return "mid"
+    return "high"
+
 
 def _weave(rng, pool, actives, recent=None, tries=3):
     """Pick one line within the car's read: lines claimed by other reads are
@@ -47,6 +58,7 @@ class Narrator:
 
     def __init__(self) -> None:
         self._cache: dict[int, dict] = {}
+        self._think: dict = {}    # per-track thinking log, until the story resolves
         from collections import deque
         # novelty memory, two grains: whole lines get a long memory (a story
         # shouldn't come back for an hour), ingredients a short one — a warm
@@ -65,45 +77,109 @@ class Narrator:
         self._recent.append(line)
         return line
 
-    def thought(self, features: dict, kind: str) -> list[str]:
-        """The raw notes the system is 'seeing' — revealed one by one, live."""
-        if features["vehicle_type"] == "person":
-            chips = ["a person"]
-            if features["color"] not in ("unknown", ""):
-                chips.append(features["color"])
-            if features["direction"] not in ("stationary", "barely moving"):
-                chips.append(features["direction"])
-            if features.get("mood"):
-                chips.append(features["mood"])
-            chips.append(features["time_of_day"])
-            r = correlator.read(features)
-            chips.append(f"reads {r['temper']} · {r['orbit']}")  # the verdict, last
-            return [c for c in chips if c]
-        ft = (features.get("fine_type") or "").replace("_", " ")
-        label = ft or style.KIND_LABEL.get(kind) or features["vehicle_type"]
-        chips = [f"a {label}"]
-        if features["color"] not in ("unknown", ""):
-            chips.append(features["color"])
-        chips.append({"big": "up close", "midsize": "mid-distance",
-                      "small": "far off"}.get(features.get("size"), ""))
-        if features.get("lane"):
-            chips.append(features["lane"])
-        if features["direction"] not in ("stationary", "barely moving"):
-            chips.append(features["direction"])
-        if features["speed"] != "still" and not features.get("behavior"):
-            chips.append(features["speed"])
-        if features.get("behavior"):
-            chips.append(features["behavior"])
-        chips.append(features["time_of_day"])
-        r = correlator.read(features)
-        chips.append(f"reads {r['temper']} · {r['orbit']}")  # the verdict, last
-        return [c for c in chips if c]
+    @staticmethod
+    def _observe(features: dict, kind: str) -> list[tuple]:
+        """The ordered observations the machine could voice, as (slot, value,
+        chip) — identity first, the verdict last. `slot` names the observation so
+        the log can tell a fresh note from a correction; `value` is what a later
+        look is compared against; `chip` is the plain wording (identity gets
+        hedged separately)."""
+        f = features
+        r = correlator.read(f)
+        verdict = f"reads {r['temper']} · {r['orbit']}"
+        if f["vehicle_type"] == "person":
+            obs = [("id", "person", "a person")]
+            if f["color"] not in ("unknown", ""):
+                obs.append(("color", f["color"], f["color"]))
+            if f["direction"] not in ("stationary", "barely moving"):
+                obs.append(("direction", f["direction"], f["direction"]))
+            if f.get("mood"):
+                obs.append(("mood", f["mood"], f["mood"]))
+            obs.append(("time", f["time_of_day"], f["time_of_day"]))
+            obs.append(("verdict", verdict, verdict))
+            return [o for o in obs if o[2]]
+        ft = (f.get("fine_type") or "").replace("_", " ")
+        label = ft or style.KIND_LABEL.get(kind) or f["vehicle_type"]
+        obs = [("id", label, f"a {label}")]
+        if f["color"] not in ("unknown", ""):
+            obs.append(("color", f["color"], f["color"]))
+        obs.append(("size", f.get("size"), {"big": "up close",
+                    "midsize": "mid-distance", "small": "far off"}.get(f.get("size"), "")))
+        if f.get("lane"):
+            obs.append(("lane", f["lane"], f["lane"]))
+        if f["direction"] not in ("stationary", "barely moving"):
+            obs.append(("direction", f["direction"], f["direction"]))
+        if f["speed"] != "still" and not f.get("behavior"):
+            obs.append(("speed", f["speed"], f["speed"]))
+        if f.get("behavior"):
+            obs.append(("behavior", f["behavior"], f["behavior"]))
+        obs.append(("time", f["time_of_day"], f["time_of_day"]))
+        obs.append(("verdict", verdict, verdict))
+        return [o for o in obs if o[2]]
+
+    def thought(self, track_id, features: dict, kind: str,
+                frames_seen: int, reveal_every: int = 2) -> list[str]:
+        """The machine reading a subject live — an append-only log, not a tidied
+        result: you watch it think. Guesses arrive one at a time, hedged by the
+        detector's own certainty; the machine catches itself when a sharper look
+        overrules an earlier read, and firms up when the confidence climbs. A
+        thing that never moves is doubted out of being a soul (a lamppost read as
+        a person is kept and named, not culled)."""
+        st = self._think.get(track_id)
+        if st is None:
+            st = self._think[track_id] = {"log": [], "seen": {}, "furniture": False}
+        log, seen = st["log"], st["seen"]
+        conf = float(features.get("confidence", 1.0))
+
+        obs = self._observe(features, kind)
+        reveal = 1 + frames_seen // max(1, reveal_every)   # how far the read has got
+        for i, (slot, value, chip) in enumerate(obs):
+            if i >= reveal:
+                break
+            if slot not in seen:                            # a fresh note
+                seen[slot] = value
+                if slot == "id":
+                    seen["_band"] = _band(conf)
+                    log.append(random.choice(style.HEDGE[_band(conf)]).format(a=chip))
+                else:
+                    log.append(chip)
+            elif slot in style.REVISABLE and value != seen[slot]:
+                seen[slot] = value                          # a correction
+                if slot == "id":
+                    seen["_band"] = _band(conf)
+                log.append(random.choice(style.REVISION).format(new=chip))
+            elif slot == "id" and value == seen[slot]:      # same guess, firmer look
+                new = _band(conf)
+                if _BANDS.index(new) > _BANDS.index(seen.get("_band", "high")):
+                    seen["_band"] = new
+                    log.append(random.choice(style.CONFIRM).format(a=chip))
+
+        # a "person" that never once moves stops reading as a life: the machine
+        # gives up on the soul and names the furniture. fires once.
+        if (not st["furniture"] and features["vehicle_type"] == "person"
+                and conf < 0.55 and frames_seen >= 10
+                and features["direction"] in ("stationary", "barely moving")):
+            st["furniture"] = True
+            thing = random.choice(style.STREET_FURNITURE)
+            log.append(random.choice(style.FURNITURE_DOUBT).format(thing=thing))
+
+        return list(log)
+
+    def reap(self, salt, alive_ids: set) -> None:
+        """Drop thinking/story state for tracks this cam session no longer sees.
+        Keys are (salt, track_id); only this session's are touched (the narrator
+        may be shared across cams)."""
+        for store in (self._think, self._cache):
+            for k in [k for k in store
+                      if isinstance(k, tuple) and k[0] == salt and k[1] not in alive_ids]:
+                del store[k]
 
     def narrate(self, track_id, features: dict) -> dict:
         # track_id is any hashable key — cam sessions pass (session, id) tuples
         # so one shared narrator can serve every cam without souls colliding
         if track_id in self._cache:
             return self._cache[track_id]
+        self._think.pop(track_id, None)   # thinking's over — the story is told
 
         rng = random  # rolled once per car, then cached — stable while on screen
         kind = style.kind_of(features)
@@ -117,7 +193,6 @@ class Narrator:
                          for p in style.SCENE_PHRASE.get(t, ())]
         scene_phrase = (_weave(rng, scene_phrases, actives, self._clauses)
                         if scene_phrases else "")
-        other = features.get("other", "")
         # the place votes too: this cam's region slips a local destination
         # into the pools now and then (a Wawa run only happens near a Wawa)
         flavor = style.REGION_FLAVOR.get(features.get("region", ""), {})
@@ -189,22 +264,18 @@ class Narrator:
                         self._clauses),
                     "origin": origin,
                     "scene_phrase": scene_phrase,
-                    "other": other,
                 }
                 if not exceptional:                # an ordinary life: one clause
                     return rng.choice(style.TEMPLATES_SHORT).format(**attrs)
-                # exceptional: shape first, then a template within it — scene and
-                # pack shapes only exist when the street offered the evidence
+                # exceptional: shape first, then a template within it — the scene
+                # shape only exists when the street actually offered the evidence
                 shapes = [("plain", 5), ("turn", 2)]
                 if scene_phrase:
                     shapes.append(("scene", 3))
-                if other:
-                    shapes.append(("pack", 3))
                 shape = rng.choices([s for s, _ in shapes],
                                     weights=[w for _, w in shapes])[0]
                 template_pool = {"plain": style.TEMPLATES, "turn": style.TEMPLATES_TURN,
-                                 "scene": style.TEMPLATES_SCENE,
-                                 "pack": style.TEMPLATES_PACK}[shape]
+                                 "scene": style.TEMPLATES_SCENE}[shape]
                 return rng.choice(template_pool).format(**attrs)
 
             lines = [self._fresh(roll_story)]

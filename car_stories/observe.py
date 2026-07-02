@@ -105,6 +105,7 @@ class Track:
             "lane": self.lane(),
             "fine_type": self.fine_type,
             "time_of_day": clock or "unknown",
+            "confidence": self.median_conf(),   # the detector's own certainty
         }
 
 
