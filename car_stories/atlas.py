@@ -145,57 +145,67 @@ def inventory() -> dict[str, int]:
 
 
 # --- render -------------------------------------------------------------------
-def _bar(n: int, hi: int, w: int = 10) -> str:
-    filled = 0 if hi <= 0 else round(w * n / hi)
-    return "█" * filled + "·" * (w - filled)
+_ABBR = {"work": "work", "school": "schl", "errands": "errd", "home": "home",
+         "social": "socl", "escape": "escp", "nowhere": "nowh"}
+
+
+def _head(title: str) -> str:
+    return f"\n{title} " + "─" * max(0, 65 - len(title))
+
+
+def _n(x) -> str:            # a 0 reads as clutter; dot it out
+    return "·" if not x else str(x)
+
+
+def _roster_line(k, w, e, p, t, a, flag, note) -> str:
+    return f"  {k:<11}{w:>5}{e:>4}{p:>4}{t:>4}{a:>5}   {flag:<2}{note}"
 
 
 def render() -> str:
     L: list[str] = []
-    L.append("PASSING STRANGER · taste atlas  (generated from style.py + correlator.py)")
+    L.append("PASSING STRANGER · taste atlas")
+    L.append("generated from style.py + correlator.py — edit the pools, rerun me")
 
-    # roster
-    L.append("\nCHARACTER ROSTER")
-    L.append(f"  {'kind':11}{'reach':8}{'detect':22}{'WHO':>5}"
-             f"{'E':>4}{'P':>3}{'T':>3}{'arch':>5}  depth")
-    for r in roster_rows():
-        depth = "MULTI" if r["multi"] else (str(r["depth"]) if r["depth"] is not None else "—")
-        who = f"{depth:>5}"
-        det = (r["detect"][:20] + "…") if len(r["detect"]) > 21 else r["detect"]
-        flag = _laps(None if r["multi"] else r["depth"])
-        star = "  ⚠" if (r["reach"] == "common" and flag == "laps") else ""
-        L.append(f"  {r['kind']:11}{r['reach']:8}{det:22}{who}"
-                 f"{r['emotion']:>4}{r['purpose']:>3}{r['toward']:>3}{r['arch']:>5}"
-                 f"  {flag}{star}")
-    L.append("  E/P/T = telos emotion/purpose/toward pools · ⚠ = common but shallow")
+    # roster, grouped by reach (no repeated reach column)
+    rows = roster_rows()
+    L.append(_head("CHARACTERS"))
+    L.append(_roster_line("", "WHO", "E", "P", "T", "arch", "", "detect →").rstrip())
+    for reach, label in (("common", "common — coarse type+size, or a cheap yellow read"),
+                         ("rare", "rare — only on a close crop (ImageNet body)")):
+        L.append(f"  · {label}")
+        for r in (x for x in rows if x["reach"] == reach):
+            depth = "MULTI" if r["multi"] else str(r["depth"])
+            shallow = (not r["multi"] and r["reach"] == "common" and r["depth"] < 8)
+            L.append(_roster_line(
+                r["kind"], depth, _n(r["emotion"]), _n(r["purpose"]),
+                _n(r["toward"]), _n(r["arch"]), "⚠" if shallow else "",
+                r["detect"]))
+    L.append("  WHO=identity lines · E/P/T=telos pools · arch=archetypes · ⚠=common+shallow")
 
-    # temper × orbit
-    L.append("\nTEMPER × ORBIT  (lines pinned to both — 0 = a life with no bespoke word)")
-    L.append("  " + " " * 9 + "".join(f"{o[:4]:>5}" for o in _ORBITS))
-    mx = matrix()
+    # temper × orbit — the bespoke-line radar
+    L.append(_head("TEMPER × ORBIT"))
+    L.append("  bespoke lines pinned to a feeling × focus  (· = none written yet)")
+    L.append("  " + " " * 10 + "".join(f"{_ABBR[o]:>6}" for o in _ORBITS))
+    mx, tc = matrix(), temper_counts()
     for t in _TEMPERS:
-        cells = "".join((f"{mx[(t, o)]:>5}" if mx[(t, o)] else "    ·")
+        cells = "".join((f"{mx[(t, o)]:>6}" if mx[(t, o)] else "     ·")
                         for o in _ORBITS)
-        thin = " ← thin" if temper_counts()[t] < _THIN else ""
-        L.append(f"  {t:9}{cells}{thin}")
-    tc, oc = temper_counts(), orbit_counts()
-    L.append("  temper claims: " + " ".join(f"{t}:{tc[t]}" for t in _TEMPERS))
-    L.append("  orbit claims:  " + " ".join(f"{o}:{oc[o]}" for o in _ORBITS))
+        L.append(f"  {t:<10}{cells}")
+    L.append("  orbit Σ    " + "  ".join(f"{_ABBR[o]}:{orbit_counts()[o]}" for o in _ORBITS))
+    L.append("  temper Σ   " + "  ".join(f"{t[:4]}:{tc[t]}" for t in _TEMPERS))
 
-    # signals
-    L.append("\nSIGNAL UTILIZATION  (values that vote / total)")
-    for s in signal_use():
-        tv = f"temper {s['temper']}/{s['n']}"
-        ov = f"orbit {s['orbit']}/{s['n']}"
-        idle = "  ← IDLE" if s["temper"] == 0 and s["orbit"] == 0 else ""
-        L.append(f"  {s['attr']:15}{tv:14}{ov:14}{idle}")
+    # signals — voters vs idle
+    L.append(_head("SIGNALS"))
+    voters = [s for s in signal_use() if s["temper"] or s["orbit"]]
+    idle = [s for s in signal_use() if not (s["temper"] or s["orbit"])]
+    for s in voters:
+        L.append(f"  {s['attr']:14}temper {s['temper']}/{s['n']:<4}"
+                 f"orbit {s['orbit']}/{s['n']}")
+    L.append("  idle (seen, never votes): " + ", ".join(s["attr"] for s in idle))
 
-    # inventory
     inv = inventory()
-    L.append(f"\nLINE INVENTORY  {inv['lines']} claimable lines · "
-             f"{inv['claimed']} claimed · {inv['free']} free "
-             f"({100 * inv['free'] // max(1, inv['lines'])}% free)")
-    L.append("edit the pools in style.py; edit the votes/claims in correlator.py; rerun me.")
+    L.append(f"\n{inv['lines']} claimable lines · {inv['claimed']} claimed · "
+             f"{inv['free']} free ({100 * inv['free'] // max(1, inv['lines'])}%)")
     return "\n".join(L)
 
 
