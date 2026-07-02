@@ -17,8 +17,8 @@ import time
 
 import cv2
 import yaml
-from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Body, FastAPI
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .narration import NarrationManager
@@ -36,11 +36,19 @@ app = FastAPI()
 app.mount("/gallery-img", StaticFiles(directory=str(GALLERY)), name="gallery")
 
 
-def _clock() -> str:
-    h = _dt.datetime.now().hour
-    return ("the small hours" if h < 6 else "morning" if h < 11 else "midday"
-            if h < 14 else "late afternoon" if h < 18 else "evening"
-            if h < 22 else "night")
+def _scene_clock(tz_name: str | None) -> dict:
+    """The cam's own local time — a Tokyo cam must not run on this laptop's clock."""
+    try:
+        import zoneinfo
+        now = (_dt.datetime.now(zoneinfo.ZoneInfo(tz_name)) if tz_name
+               else _dt.datetime.now())
+    except Exception:
+        now = _dt.datetime.now()
+    h = now.hour
+    bucket = ("the small hours" if h < 6 else "morning" if h < 11 else "midday"
+              if h < 14 else "late afternoon" if h < 18 else "evening"
+              if h < 22 else "night")
+    return {"clock": bucket, "weekend": now.weekday() >= 5}
 
 
 def _load_cams() -> dict:
@@ -83,6 +91,7 @@ class Session:
         self.stop = threading.Event()
         self._lock = threading.Lock()
         self._latest: dict | None = None
+        self.refs = 0
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self) -> None:
@@ -98,7 +107,7 @@ class Session:
     def _run(self) -> None:
         tracker = Tracker(classify=True)   # fine body-type on close crops
         default_min = 4 if self.cam.get("type") == "snapshot" else 12
-        nm = NarrationManager(Narrator(), clock=_clock(),
+        nm = NarrationManager(Narrator(),
                               min_frames=self.cam.get("min_frames", default_min),
                               locale=self.cam.get("locale", "default"))
         for idx, frame in enumerate(_frames(self.cam, self.stop)):
@@ -107,13 +116,17 @@ class Session:
             if frame.shape[1] > MAX_WIDTH:
                 s = MAX_WIDTH / frame.shape[1]
                 frame = cv2.resize(frame, (MAX_WIDTH, int(frame.shape[0] * s)))
-            overlays = nm.step(tracker.update(frame, idx), fps=15.0)
+            # the stream's own metadata is evidence too: the cam's local hour,
+            # the day of week, and how much light the street actually has
+            scene = _scene_clock(self.cam.get("tz"))
+            scene["brightness"] = float(frame[::16, ::16].mean())
+            overlays = nm.step(tracker.update(frame, idx), fps=15.0, scene=scene)
             composed = draw_live(frame, overlays)
             ok, buf = cv2.imencode(".jpg", composed, [cv2.IMWRITE_JPEG_QUALITY, 70])
             if not ok:
                 continue
             with self._lock:
-                self._latest = {"jpeg": base64.b64encode(buf).decode()}
+                self._latest = {"jpeg": buf.tobytes(), "seq": idx}
 
 
 @app.get("/")
@@ -143,24 +156,59 @@ async def clip(payload: dict = Body(...)):
     return JSONResponse({"url": f"/gallery-img/{name}"})
 
 
-@app.websocket("/ws")
-async def ws(websocket: WebSocket, cam: str | None = None):
-    await websocket.accept()
+# one shared session per cam — reconnects and extra tabs must never stack
+# duplicate YOLO trackers (each one is a full model on the GPU)
+_sessions: dict[str, Session] = {}
+_sessions_lock = threading.Lock()
+
+
+def _acquire(cam: dict) -> Session:
+    with _sessions_lock:
+        s = _sessions.get(cam["id"])
+        if s is None or s.stop.is_set():
+            s = Session(cam)
+            _sessions[cam["id"]] = s
+            s.start()
+        s.refs += 1
+        return s
+
+
+def _release(cam_id: str) -> None:
+    with _sessions_lock:
+        s = _sessions.get(cam_id)
+        if s is not None:
+            s.refs -= 1
+            if s.refs <= 0:
+                s.close()
+                del _sessions[cam_id]
+
+
+@app.get("/stream")
+async def stream(cam: str | None = None):
+    """Native MJPEG (multipart/x-mixed-replace) — the browser's <img> decodes
+    it in C++ with no per-frame JavaScript at all."""
     config = _load_cams()
     cam_id = cam or config.get("default")
     chosen = next((c for c in config["cams"] if c["id"] == cam_id), config["cams"][0])
-    session = Session(chosen)
-    session.start()
-    try:
-        while True:
-            latest = session.get()
-            if latest:
-                await websocket.send_json({"type": "frame", **latest})
-            await asyncio.sleep(1 / 15)
-    except WebSocketDisconnect:
-        pass
-    finally:
-        session.close()
+    session = _acquire(chosen)
+
+    async def gen():
+        last_seq = -1
+        try:
+            while True:
+                latest = session.get()
+                if latest and latest["seq"] != last_seq:
+                    last_seq = latest["seq"]
+                    jpg = latest["jpeg"]
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
+                           + f"Content-Length: {len(jpg)}\r\n\r\n".encode()
+                           + jpg + b"\r\n")
+                await asyncio.sleep(1 / 15)
+        finally:                                   # runs when the client disconnects
+            _release(chosen["id"])
+
+    return StreamingResponse(gen(),
+                             media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 def main() -> None:

@@ -47,19 +47,57 @@ class NarrationManager:
             return "hurrying"
         return "ambling"
 
-    def step(self, tracks: dict[int, Track], fps: float) -> list[dict]:
+    def _neighbor(self, t: Track, tracks: dict[int, Track]) -> str:
+        """Another car actually sharing the frame — for the pack story shape."""
+        best, bd = None, 1e9
+        for o in tracks.values():
+            if (o.track_id == t.track_id or o.cls_name == "person"
+                    or o.color in ("unknown", "") or not o.centers):
+                continue
+            (x, y), (a, b) = t.centers[-1], o.centers[-1]
+            d = abs(x - a) + abs(y - b)
+            if d < bd:
+                bd, best = d, o
+        if best is not None and bd < 420:
+            noun = {"motorcycle": "bike"}.get(best.cls_name, best.cls_name)
+            return f"the {best.color} {noun}"
+        return ""
+
+    def step(self, tracks: dict[int, Track], fps: float,
+             scene: dict | None = None) -> list[dict]:
+        scene = dict(scene or {})
         shown = sorted(tracks.values(), key=lambda t: -t.rel_size)[:self.max_shown]
         speeds = [t.avg_speed() for t in tracks.values()
                   if t.cls_name != "person" and t.frames_seen >= 4]
         pack_median = statistics.median(speeds) if speeds else 0.0
+
+        # what the street is doing right now — evidence, from the stream itself
+        n = sum(1 for t in tracks.values() if t.cls_name != "person")
+        scene["tempo"] = ("the crawl" if n >= 7 and pack_median < 3.5 else
+                          "the thick of it" if n >= 7 else
+                          "an empty street" if n <= 1 else
+                          "a quiet road" if n <= 3 else "")
+        b = scene.get("brightness")
+        scene["light"] = ("" if b is None else
+                          "dark" if b < 55 else "dim" if b < 115 else
+                          "bright" if b >= 180 else "")
+        clock = scene.get("clock", self.clock)
+        tags = [scene["tempo"], scene["light"]]
+        if scene.get("weekend"):
+            tags.append("weekend")
+        scene_tags = [t_ for t_ in tags if t_]
+
         overlays = []
         for t in shown:
-            feats = t.features(fps, self.clock)
+            feats = t.features(fps, clock)
             feats["locale"] = self.locale
+            feats["scene"] = scene
+            feats["scene_tags"] = scene_tags
             if t.cls_name == "person":
                 feats["mood"] = self._person_mood(t)
             else:
                 feats["behavior"] = self._behavior(t, pack_median)
+                feats["other"] = self._neighbor(t, tracks)
             if t.frames_seen >= self.min_frames:
                 r = self.narrator.narrate(t.track_id, feats)
                 overlays.append({"id": t.track_id, "box": list(t.last_box),

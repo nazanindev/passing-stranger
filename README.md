@@ -36,6 +36,12 @@ evidence we have. A yellow car on a US cam reads as a cab, and a cab is never
 "going nowhere" — kinds with a visible destination (cab, mover, trucker, school
 bus…) get their own pools in `style.py`.
 
+The taste lives on two surfaces. `style.py` says what things *are*;
+`correlator.py` says how a combination of evidence becomes a **mood** — every
+attribute votes (racing votes harried, a blue car votes quiet, the small hours
+vote quiet twice), the combination's winner is the read, and every clause of
+the story derives from it. No dice in the reading: same evidence, same mood.
+
 ## Later
 
 - **Surveillance framing** — foreground the apparatus next to the tenderness:

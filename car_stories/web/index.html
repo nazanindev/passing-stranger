@@ -60,7 +60,7 @@
 const cv=document.getElementById('cv'), nav=document.getElementById('nav');
 const camline=document.getElementById('camline'), statusEl=document.getElementById('status');
 const grid=document.getElementById('grid'), clipbtn=document.getElementById('clipbtn');
-let ws, currentCam=null, gallerySeen=new Set();
+let currentCam=null, gallerySeen=new Set(), retryTimer=null;
 
 function addTile(url, front){
   if(gallerySeen.has(url)) return;
@@ -72,24 +72,29 @@ function addTile(url, front){
 }
 
 clipbtn.onclick=async ()=>{
-  if(!cv.src) return;
+  if(!cv.naturalWidth) return;
   clipbtn.textContent='✦ clipped';
   setTimeout(()=>clipbtn.textContent='✦ clip', 900);
-  const b64=cv.src.split(',')[1];
+  const c=document.createElement('canvas');
+  c.width=cv.naturalWidth; c.height=cv.naturalHeight;
+  c.getContext('2d').drawImage(cv,0,0);
+  const b64=c.toDataURL('image/jpeg',0.9).split(',')[1];
   const r=await fetch('/clip',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({jpeg:b64})});
   const {url}=await r.json();
   addTile(url, true);
 };
 
+// native MJPEG into a plain <img> — the browser handles every frame in C++;
+// no websocket, no per-frame JS, nothing to leak
 function connect(camId){
-  if(ws){ws.onclose=null;ws.close();}
-  const proto=location.protocol==='https:'?'wss':'ws';
-  const q=camId?('?cam='+encodeURIComponent(camId)):'';
-  ws=new WebSocket(proto+'://'+location.host+'/ws'+q);
-  ws.onopen=()=>statusEl.textContent='live';
-  ws.onclose=()=>{statusEl.textContent='reconnecting…';setTimeout(()=>connect(currentCam),1500);};
-  ws.onmessage=ev=>{const m=JSON.parse(ev.data); if(m.type==='frame') cv.src='data:image/jpeg;base64,'+m.jpeg;};
+  clearTimeout(retryTimer);
+  statusEl.textContent='connecting…';
+  const q='?cam='+encodeURIComponent(camId||'')+'&t='+Date.now();
+  cv.onload=()=>statusEl.textContent='live';
+  cv.onerror=()=>{statusEl.textContent='reconnecting…';
+    retryTimer=setTimeout(()=>connect(currentCam),2000);};
+  cv.src='/stream'+q;
 }
 
 async function pollGallery(){

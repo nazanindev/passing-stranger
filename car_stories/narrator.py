@@ -4,18 +4,28 @@ Returns {"lines": [...], "archetype": ...}. Most vehicles get one short line; a
 bus gets several (many stories through the windows). Each car is rolled once and
 cached, so it never changes while it's on screen. None of it is real.
 
-The taste lives in style.py — edit that. This file is just the machinery.
+The taste lives in style.py (what things are) and correlator.py (what belongs
+together) — edit those. This file is just the machinery.
 """
 
 from __future__ import annotations
 
 import random
 
-from . import style
+from . import correlator, style
 
 
-def _pick(rng, pool_map, key):
-    return rng.choice(pool_map.get(key, pool_map["_"]))
+def _weave(rng, pool, actives):
+    """Pick one line, leaning into the car's read: lines the correlator claims
+    for the active temper/orbit are favored, lines claimed only elsewhere are
+    dropped, free lines stay in. If the filter empties the pool, the pool stands."""
+    on = [e for e in pool if correlator.claims(e) & actives]
+    free = [e for e in pool if not correlator.claims(e)]
+    return rng.choice(on * 2 + free if on else (free or list(pool)))
+
+
+def _pick(rng, pool_map, key, actives):
+    return _weave(rng, pool_map.get(key, pool_map["_"]), actives)
 
 
 class Narrator:
@@ -23,6 +33,20 @@ class Narrator:
 
     def __init__(self) -> None:
         self._cache: dict[int, dict] = {}
+        # novelty memory: the storyteller won't repeat a line it said recently —
+        # if the dice land on one, it rerolls (~an hour of stories at busy cams)
+        from collections import deque
+        self._recent: deque = deque(maxlen=80)
+
+    def _fresh(self, roll, tries: int = 6):
+        """Reroll until the line hasn't been said recently (or give up)."""
+        line = roll()
+        for _ in range(tries):
+            if line not in self._recent:
+                break
+            line = roll()
+        self._recent.append(line)
+        return line
 
     @property
     def dry(self) -> bool:
@@ -39,6 +63,8 @@ class Narrator:
             if features.get("mood"):
                 chips.append(features["mood"])
             chips.append(features["time_of_day"])
+            r = correlator.read(features)
+            chips.append(f"reads {r['temper']} · {r['orbit']}")  # the verdict, last
             return [c for c in chips if c]
         ft = (features.get("fine_type") or "").replace("_", " ")
         label = ft or style.KIND_LABEL.get(kind) or features["vehicle_type"]
@@ -56,6 +82,8 @@ class Narrator:
         if features.get("behavior"):
             chips.append(features["behavior"])
         chips.append(features["time_of_day"])
+        r = correlator.read(features)
+        chips.append(f"reads {r['temper']} · {r['orbit']}")  # the verdict, last
         return [c for c in chips if c]
 
     def narrate(self, track_id: int, features: dict) -> dict:
@@ -64,45 +92,89 @@ class Narrator:
 
         rng = random  # rolled once per car, then cached — stable while on screen
         kind = style.kind_of(features)
+        # the read: evidence votes on two axes (no dice) — temper (how it feels)
+        # and orbit (what the life is about); every clause below derives from both
+        r = correlator.read(features)
+        actives = {r["temper"], r["orbit"]}
+
+        # what the street offers this car, if anything
+        scene_phrases = [p for t in features.get("scene_tags", ())
+                         for p in style.SCENE_PHRASE.get(t, ())]
+        scene_phrase = rng.choice(scene_phrases) if scene_phrases else ""
+        other = features.get("other", "")
 
         if features["vehicle_type"] == "person":
-            mood = features.get("mood", "ambling")
-            attrs = {"who": rng.choice(style.PERSON_WHO),
-                     "mood": rng.choice(style.PERSON_MOOD[mood]),
-                     "toward": rng.choice(style.TOWARD)}
-            lines = [rng.choice(style.PERSON_TEMPLATES).format(**attrs)]
+            walk = features.get("mood", "ambling")  # gait, not the correlator's read
+
+            def roll_person():
+                attrs = {"who": _weave(rng, style.PERSON_WHO, actives),
+                         "mood": _weave(rng, style.PERSON_MOOD[walk], actives),
+                         "toward": _weave(rng, style.TOWARD, actives)}
+                return rng.choice(style.PERSON_TEMPLATES).format(**attrs)
+
+            lines = [self._fresh(roll_person)]
             archetype = "The Passerby"
         elif kind in style.MULTI:
             pool = style.MULTI_LIVES.get(kind, style.BUS_LIVES)  # situations, not names
-            lines = rng.sample(pool, style.BUS_COUNT)
+            # passengers share the hour's read, not one life — filter, don't favor
+            on_or_free = [e for e in pool
+                          if not correlator.claims(e) or correlator.claims(e) & actives]
+            cands = on_or_free if len(on_or_free) >= style.BUS_COUNT else list(pool)
+            lines = []
+            for _ in range(style.BUS_COUNT):
+                line = self._fresh(lambda: rng.choice(cands))
+                if line not in lines:
+                    lines.append(line)
             archetype = {"transit": "The Manyfold", "kids": "The School Run"}.get(
                 kind, "The Busful")
         else:
             origin, _dest = style.GEOGRAPHY.get(features["direction"], style.GEOGRAPHY["_"])
             beh = features.get("behavior")
-            if kind in style.KIND_EMOTION:
-                # a kind with a visible telos: the job sets the feeling; behavior
-                # folds into speed so a hurrying cab is never "running from something"
-                key = style.BEH_TO_SPEED.get(beh, features["speed"])
-                emotion = _pick(rng, style.KIND_EMOTION[kind], key)
-            elif beh in style.BEHAVIOR_EMOTION:
-                emotion = rng.choice(style.BEHAVIOR_EMOTION[beh])
-            else:
-                emotion = _pick(rng, style.EMOTION, features["speed"])
-            purpose = (rng.choice(style.KIND_PURPOSE[kind]) if kind in style.KIND_PURPOSE
-                       else _pick(rng, style.PURPOSE, features["time_of_day"]))
-            attrs = {
-                "who": rng.choice(style.WHO[kind]),
-                "emotion": emotion,
-                "purpose": purpose,
-                "toward": rng.choice(style.KIND_TOWARD.get(kind, style.TOWARD)),
-                "origin": origin,
-            }
-            lines = [rng.choice(style.TEMPLATES).format(**attrs)]
+
+            def roll_story():
+                if kind in style.KIND_EMOTION:
+                    # a kind with a visible telos: the job sets the feeling; behavior
+                    # folds into speed so a hurrying cab is never "running from something"
+                    key = style.BEH_TO_SPEED.get(beh, features["speed"])
+                    emotion = _pick(rng, style.KIND_EMOTION[kind], key, actives)
+                elif beh in style.BEHAVIOR_EMOTION:
+                    emotion = _weave(rng, style.BEHAVIOR_EMOTION[beh], actives)
+                else:
+                    emotion = _pick(rng, style.EMOTION, features["speed"], actives)
+                purpose = (rng.choice(style.KIND_PURPOSE[kind])
+                           if kind in style.KIND_PURPOSE
+                           else _pick(rng, style.PURPOSE, features["time_of_day"], actives))
+                attrs = {
+                    "who": _weave(rng, style.WHO[kind], actives),
+                    "emotion": emotion,
+                    "purpose": purpose,
+                    "toward": _weave(rng, style.KIND_TOWARD.get(kind, style.TOWARD),
+                                     actives),
+                    "origin": origin,
+                    "scene_phrase": scene_phrase,
+                    "other": other,
+                }
+                # shape first, then a template within it — scene and pack shapes
+                # only exist when the street actually offered the evidence
+                shapes = [("plain", 5), ("turn", 2)]
+                if scene_phrase:
+                    shapes.append(("scene", 3))
+                if other:
+                    shapes.append(("pack", 3))
+                shape = rng.choices([s for s, _ in shapes],
+                                    weights=[w for _, w in shapes])[0]
+                template_pool = {"plain": style.TEMPLATES, "turn": style.TEMPLATES_TURN,
+                                 "scene": style.TEMPLATES_SCENE,
+                                 "pack": style.TEMPLATES_PACK}[shape]
+                return rng.choice(template_pool).format(**attrs)
+
+            lines = [self._fresh(roll_story)]
             archetype = (rng.choice(style.KIND_ARCHETYPE[kind])
                          if kind in style.KIND_ARCHETYPE
-                         else f"The {rng.choice(style.ARCH_ADJ)} {rng.choice(style.ARCH_NOUN)}")
+                         else f"The {_weave(rng, style.ARCH_ADJ, actives)} "
+                              f"{_weave(rng, style.ARCH_NOUN, actives)}")
 
-        result = {"lines": lines, "archetype": archetype, "kind": kind}
+        result = {"lines": lines, "archetype": archetype, "kind": kind,
+                  "temper": r["temper"], "orbit": r["orbit"]}
         self._cache[track_id] = result
         return result

@@ -107,8 +107,15 @@ def _overlaps(a, b) -> bool:
     return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
 
 
+# label anchors remembered across frames so text glides instead of teleporting
+_ANCHORS: dict[int, list] = {}
+
+
 def draw_live(frame: np.ndarray, overlays: list[dict]) -> np.ndarray:
     """Dim monospace 'thinking' while a car is read; serif accent story on resolve."""
+    live_ids = {o["id"] for o in overlays}
+    for tid in [k for k in _ANCHORS if k not in live_ids]:
+        del _ANCHORS[tid]
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     d = ImageDraw.Draw(img, "RGBA")
     W, H = img.size
@@ -160,6 +167,13 @@ def draw_live(frame: np.ndarray, overlays: list[dict]) -> np.ndarray:
             ty += step
             if ty + total > H - 6:
                 ty = 6
+        # ease toward the target instead of snapping — unless it jumped far
+        # (new slot after a collision), in which case follow it immediately
+        prev = _ANCHORS.get(o["id"])
+        if prev is not None and abs(prev[0] - tx) + abs(prev[1] - ty) < 120:
+            tx = int(prev[0] * 0.75 + tx * 0.25)
+            ty = int(prev[1] * 0.75 + ty * 0.25)
+        _ANCHORS[o["id"]] = [tx, ty]
         placed.append((tx - 2, ty - 2, tx + maxw + 2, ty + total + 2))
 
         cy = ty

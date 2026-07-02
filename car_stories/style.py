@@ -19,6 +19,9 @@ their own emotion/purpose pools (KIND_EMOTION etc.) instead of the generic ones.
 Register: mostly mundane. Most lives are errands, dinner, the gym — the ache is
 rationed to a few entries per pool so it lands rarely and therefore lands.
 Nobody's long-lost daughter shows up on a Tuesday commute.
+
+What belongs *together* is not this file's job — that's the correlator
+(correlator.py), the second taste surface.
 """
 
 # No names. The camera can't know a name, and a guessed one claims too much —
@@ -64,30 +67,44 @@ def kind_of(features: dict) -> str:
     return {"big": "hauler", "small": "compact"}.get(features["size"], "sedan")
 
 
-# how the thinking-chips label a heuristic read (hedged — it's a guess, own it)
-KIND_LABEL = {"cabbie": "taxi, probably", "kids": "school bus"}
+# how the thinking-chips label a heuristic read (committed — the machine
+# doesn't hedge; being confidently wrong is part of the piece)
+KIND_LABEL = {"cabbie": "taxi", "kids": "school bus"}
 
 
 # who they are — the association per kind (your call)
 WHO = {
     # coarse (type + size), used when we never saw the car up close
     "hauler": ["someone's mom", "a dad on pickup duty", "a carpool three kids deep",
-               "a family, probably", "the school-run shift",
+               "a family", "the school-run shift",
                "a whole team's worth of cleats", "errands stacked three deep",
-               "the designated aunt"],
-    "compact": ["young and broke", "a first car, barely", "a student, probably",
+               "the designated aunt", "a caterer with trays sliding",
+               "a dog-rescue volunteer", "a garage band and all their gear",
+               "someone moving a couch as a favor"],
+    "compact": ["young and broke", "a first car, barely", "a student",
                 "someone starting out", "living close to the bone",
-                "a parallel-parker by necessity", "renting, still"],
+                "a parallel-parker by necessity", "renting, still",
+                "a nurse coming off nights", "a retiree who downsized the car too",
+                "paid off as of last month", "a barista with a second act",
+                "someone who likes small cars, no story there",
+                "an organist, believe it or not", "a grad student defending in spring"],
     "sedan": ["someone ordinary, which is to say infinite", "a commuter",
               "nobody in particular", "a regular",
               "the middle of the bell curve, driving",
-              "a work badge on the passenger seat", "a podcast half-listened to"],
+              "a work badge on the passenger seat", "a podcast half-listened to",
+              "a middle manager rehearsing kindness", "half of a long-distance thing",
+              "a notary with a full afternoon", "somebody's landlord, off the clock",
+              "an inspector of something obscure", "a birdwatcher out of season",
+              "a wedding guest who left early"],
     "truck": ["a tradesman", "a hauler by trade", "someone who works with his hands",
               "a life of loading and unloading", "a bed full of somebody's weekend",
-              "paid by the job, not the hour"],
+              "paid by the job, not the hour", "a beekeeper, oddly",
+              "a fence-builder between jobs",
+              "somebody's uncle with opinions about torque"],
     "motorcycle": ["free and a little reckless", "nothing to lose today",
                    "a shortcut kind of person", "one bad decision from a great story",
-                   "cold hands, no regrets"],
+                   "cold hands, no regrets", "a commuter who did the math",
+                   "quieter than the bike suggests"],
     # fine (classifier close-up, or a color+locale read)
     "family": ["someone's mom", "a dad on pickup duty", "a carpool three kids deep",
                "the school-run shift", "juice boxes and diplomacy",
@@ -98,7 +115,7 @@ WHO = {
                  "retired into motion"],
     "showoff": ["wants you to look", "young money, or faking it", "weekend adrenaline",
                 "the payment's due on the 1st", "louder than necessary, on purpose"],
-    "wealth": ["someone being driven", "an occasion, probably", "money that stays quiet",
+    "wealth": ["someone being driven", "an occasion", "money that stays quiet",
                "tinted windows and a schedule"],
     "cabbie": ["a stranger in the back", "someone else's hurry", "the city's confessional",
                "forty stories a shift, none theirs", "a map of the city kept in the hands"],
@@ -110,7 +127,7 @@ WHO = {
               "the reason the streets are clean by seven"],
     "trucker": ["a thousand miles from home", "hauling for someone else", "coffee and centerlines",
                 "home is a bunk behind the seat", "on a first-name basis with three time zones"],
-    "rugged": ["allergic to pavement", "a weekend escape artist", "dogs in the back, probably",
+    "rugged": ["allergic to pavement", "a weekend escape artist", "dogs in the back",
                "mud as a personality"],
     "vintage": ["an old soul, kept running", "loved for decades", "slower on purpose",
                 "original parts, mostly"],
@@ -198,6 +215,13 @@ BUS_LIVES = ["late for work", "going home", "asleep by the window",
              "carrying soup, carefully", "first day, wrong shoes",
              "old friends by accident",
              "counting stops in a language they're learning",
+             "a paperback with a cracked spine", "leftovers riding shotgun",
+             "one earbud, out of courtesy", "a birthday card, unsigned",
+             "practicing the ask for a raise", "a plant balanced on one knee",
+             "off at the next one, promise", "somebody's grandmother, unbothered",
+             "a chess set and somewhere to be", "wet paint on their good jeans",
+             "an umbrella on a clear day", "two crosswords ahead of the seatmate",
+             "a cake box held level, mostly", "reading over a stranger's shoulder",
              # the rationed ache
              "texting someone they shouldn't", "watching their stop go by on purpose"]
 BUS_COUNT = 3
@@ -221,6 +245,7 @@ EMOTION = {  # by speed — mostly mundane; one ache each, rationed
     "cruising": ["easy for once", "in no rush", "between things",
                  "the radio doing the feeling", "letting the day settle",
                  "windows down on principle", "making good time and telling no one",
+                 "humming something old", "tempted to miss the exit on purpose",
                  "alone on purpose"],
     "crawling": ["stuck and patient", "done with today", "waiting it out",
                  "counting brake lights", "resigned to the clock",
@@ -250,17 +275,22 @@ GEOGRAPHY = {  # (from, toward) by direction
     "_": ("across town", "the other side"),
 }
 
-PURPOSE = {  # by actual time of day
+PURPOSE = {  # by actual time of day (each hour keeps a free line — any life fits it)
     "morning": ["the school run", "a first shift", "a meeting they didn't ask for",
-                "coffee before the hard part", "drop-off, then the day"],
+                "coffee before the hard part", "drop-off, then the day",
+                "the day, already moving"],
     "midday": ["errands", "a late lunch", "an appointment",
-               "the gym, allegedly", "a lunch that's really a favor"],
+               "the gym", "a lunch that's really a favor",
+               "the middle stretch of the day"],
     "late afternoon": ["the way home", "a pickup", "the school gate",
-                       "one last errand", "beating the rush, and failing"],
+                       "one last errand", "beating the rush, and failing",
+                       "the tail end of the day"],
     "evening": ["home", "the night shift", "a dinner going cold",
-                "somebody's birthday", "practice pickup"],
+                "somebody's birthday", "practice pickup",
+                "the last stop of the day"],
     "night": ["nowhere in particular", "a friend's couch", "the late shift",
-              "a drive to clear their head", "one more hour of freedom"],
+              "a drive to clear their head", "one more hour of freedom",
+              "no plan past the on-ramp", "the drive itself, mostly"],
     "the small hours": ["the airport", "a shift nobody wanted", "home, very late",
                         "the first flight out", "the hospital"],
     "_": ["the usual rounds", "somewhere they keep putting off"],
@@ -268,12 +298,15 @@ PURPOSE = {  # by actual time of day
 
 # people on foot — their own voice
 PERSON_WHO = ["someone late for something", "a person with nowhere to be",
-              "a commuter on foot", "a local, unhurried", "a tourist, probably",
+              "a commuter on foot", "a local, unhurried", "a tourist",
               "someone between appointments", "a worker on break",
               "a student, headphones in", "a regular the cafe knows by order",
               "somebody's neighbor", "a dog walker without the dog today",
               "a night-shifter heading in early",
-              "a stranger everyone here has seen before"]
+              "a stranger everyone here has seen before",
+              "a retired teacher who knows this block",
+              "someone walking off a big lunch",
+              "a new parent stealing an hour"]
 PERSON_MOOD = {
     "waiting": ["waiting on someone", "killing time", "checking the time again",
                 "not sure they're in the right place",
@@ -290,10 +323,15 @@ PERSON_TEMPLATES = ["{who}, {mood}", "{who} · {toward}", "{mood}, {toward}",
 
 TOWARD = ["toward home", "to the recital", "to the night shift", "home, finally",
           "to pick up the cake", "back for the thing they forgot",
-          "home to let the dog out", "to the gym, probably",
+          "home to let the dog out",
           "to the pharmacy before it closes", "toward dinner, eventually",
           "to return the drill", "to a friend's couch and the game",
           "to the grocery store, list forgotten", "toward nothing urgent",
+          "out past the last exit", "toward an address on a napkin",
+          "to a door with the porch light on", "to the gym",
+          # free lines — any life fits (keep a few, or moods run out of road)
+          "toward the usual exit", "down a road they could drive asleep",
+          "a few blocks more",
           # the rationed ache
           "to see his mother", "to the appointment they rescheduled twice",
           "toward a kitchen with the light still on"]
@@ -301,13 +339,15 @@ TOWARD = ["toward home", "to the recital", "to the night shift", "home, finally"
 ARCH_ADJ = ["Reluctant", "Late", "Unhurried", "Homebound", "Patient",
             "Punctual", "Stubborn", "Quiet", "Reasonable", "Weekday",
             "Almost-There", "Second-Guessing", "Borrowed", "Faithful",
-            "Restless", "Overdue"]
+            "Restless", "Overdue", "Tender", "Turned-Around"]
 ARCH_NOUN = ["Commuter", "Visitor", "Regular", "Neighbor", "Local",
              "Errand-Runner", "Carpooler", "Latecomer", "Optimist",
              "Middle Child", "Caretaker", "Provider", "Understudy",
-             "Stranger", "Witness"]
+             "Stranger", "Witness", "Wanderer", "Guest"]
 
-# how a single line gets assembled (bus is handled separately)
+# how a single line gets assembled (bus is handled separately).
+# The narrator picks a *shape* first — plain, turn, scene, or pack — then a
+# template within it. Scene and pack shapes only fire when the evidence exists.
 TEMPLATES = [
     "{who}, {emotion}",
     "{who} · {toward}",
@@ -317,3 +357,37 @@ TEMPLATES = [
     "{emotion} · {purpose}",
     "in from {origin} · {toward}",
 ]
+
+# the turn — a clause that pulls against the first
+TEMPLATES_TURN = [
+    "{emotion}, but {toward}",
+    "{who} — {emotion}, {toward} all the same",
+]
+
+# the street speaks — {scene_phrase} comes from what the cam can see right now
+TEMPLATES_SCENE = [
+    "{scene_phrase}, {emotion}",
+    "{scene_phrase} · {toward}",
+    "{who} · {scene_phrase}",
+]
+
+# two strangers, one frame — {other} is another car actually on screen
+TEMPLATES_PACK = [
+    "{emotion}, pacing {other}",
+    "trading lanes with {other} · {toward}",
+    "{who}, following {other} without meaning to",
+]
+
+SCENE_PHRASE = {  # keyed by the scene tags narration.py derives from the stream
+    "an empty street": ["the only one on the road", "no audience but the camera",
+                        "the street to themselves"],
+    "a quiet road": ["one of the few out", "the road mostly theirs"],
+    "the thick of it": ["anonymous in the current", "one of the many",
+                        "swimming with the school"],
+    "the crawl": ["one brake light among hundreds", "boxed in on every side",
+                  "part of the long red river"],
+    "dark": ["headlights doing the seeing", "past the lit windows"],
+    "dim": ["under a flat gray sky", "in the day's last usable light"],
+    "bright": ["squinting into the glare", "in hard daylight"],
+    "weekend": ["nowhere to be till Monday", "on weekend time"],
+}
