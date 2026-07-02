@@ -151,7 +151,9 @@ class Session:
 
 @app.get("/")
 async def index():
-    return FileResponse(WEB / "index.html")
+    # no-cache: browsers heuristically cache pages served without it, and
+    # then UI fixes never reach anyone (revalidation is cheap — one 304)
+    return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/cams")

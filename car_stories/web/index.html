@@ -27,10 +27,10 @@
     grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:.9rem;align-content:start;
     background:var(--panel)}
   #grid[hidden]{display:none}
-  #grid .tile{position:relative;border:1px solid var(--hair);border-radius:.35rem;
-    overflow:hidden;line-height:0;animation:in .5s ease}
-  #grid .tile a{display:block;position:relative;padding-top:56.25%;background:#000}
-  #grid img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  #grid .tile{position:relative;padding-top:56.25%;border:1px solid var(--hair);
+    border-radius:.35rem;overflow:hidden;animation:in .5s ease}
+  #grid .tile a{position:absolute;inset:0;display:block;background:#000}
+  #grid img{width:100%;height:100%;object-fit:contain;display:block}
   #grid .tile .del{position:absolute;top:.45rem;right:.45rem;display:none;
     background:rgba(14,13,11,.72);border:1px solid var(--hair);color:var(--ink);
     font:inherit;font-size:.7rem;line-height:1;padding:.3rem .45rem;border-radius:999px;
