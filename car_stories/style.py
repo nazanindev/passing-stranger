@@ -134,7 +134,31 @@ WHO = {
                 "a painter between commissions", "a realtor between showings",
                 "a home-care aide on the third visit of four",
                 "a poet with a day job", "an accountant who did the math on gas",
-                "a substitute teacher, new school every week"],
+                "a substitute teacher, new school every week",
+                # the fleshed-out one: a young woman newly transplanted, a beat-up
+                # small sedan, the radio always up — work, the few friends she's
+                # made, obscure errands, the occasional night date, and the
+                # lonely-free drive that clears her head. (Gender's invention, not
+                # a read; it stays in this kind's pool, so it never lands on a
+                # truck. Nothing here claims a time or a speed — those are the
+                # honest pools' job, so a noon compact never "night-drives".)
+                "new to the city, and it shows a little",
+                "a few months in, still learning the one-ways",
+                "just moved here, everything still a wrong turn",
+                "learning the city one wrong turn at a time",
+                "a fresh transplant, half the boxes still packed",
+                "her first city, her first lease",
+                "off to see the handful of friends she's made",
+                "a date she hasn't mentioned to the group chat",
+                "running an errand only she would call urgent",
+                "a glovebox full of half-finished errands",
+                "the radio always a little too loud",
+                "blasting something nobody else has heard of",
+                "singing in the car like nobody can see in",
+                "a dreamer who thinks best behind the wheel",
+                "lonely in the way a new city makes you",
+                "a beat-up first car she loves anyway",
+                "young, broke, and free in about equal measure"],
     "sedan": ["someone ordinary, which is to say infinite", "a commuter",
               "nobody in particular", "a regular",
               "the middle of the bell curve, driving",
@@ -374,7 +398,8 @@ EMOTION = {  # by speed — mostly mundane; one ache each, rationed.
                  "keeping a comfortable distance", "signaling early, like they teach",
                  "at peace with the speed limit", "a full tank and no opinions",
                  "the commute on autopilot", "letting the fast ones pass",
-                 "alone on purpose",
+                 "alone on purpose", "the radio up past all sense",
+                 "a song they'd never admit to, loud",
                  "fluid, affectionate, chaste"],   # the collage, rationed
     "crawling": ["stuck and patient", "done with today", "waiting it out",
                  "counting brake lights", "resigned to the clock",
@@ -425,7 +450,9 @@ PURPOSE = {  # by actual time of day (each hour keeps a free line — any life f
                 "the last stop of the day"],
     "night": ["nowhere in particular", "a friend's couch", "the late shift",
               "a drive to clear their head", "one more hour of freedom",
-              "no plan past the on-ramp", "the drive itself, mostly"],
+              "no plan past the on-ramp", "the drive itself, mostly",
+              "the long way home, for the song", "a slow lap of the city, radio up",
+              "out driving to feel like someone in a movie"],
     "the small hours": ["the airport", "a shift nobody wanted", "home, very late",
                         "the first flight out", "the hospital"],
     "_": ["the usual rounds", "somewhere they keep putting off"],
@@ -472,7 +499,7 @@ TOWARD = ["toward home", "to the recital", "to the night shift", "home, finally"
           "to a door with the porch light on", "to the gym",
           # free lines — any life fits (keep a few, or moods run out of road)
           "toward the usual exit", "down a road they could drive asleep",
-          "a few blocks more",
+          "a few blocks more", "the long way, chosen on purpose",
           # the rationed ache
           "to see his mother", "to the appointment they rescheduled twice",
           "toward a kitchen with the light still on",

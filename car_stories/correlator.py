@@ -68,6 +68,10 @@ TEMPER_VOTES = {
     "wanderer": {"restless": 2},
     "rugged": {"restless": 2},
     "motorcycle": {"restless": 2},
+    # the small beat-up sedan leans introspective/free — enough to tip a night
+    # read toward quiet or light (her registers), never enough to beat the strong
+    # steady of a daytime cruise
+    "compact": {"quiet": 1, "restless": 1, "light": 1},
     # the place itself (vibe: in cams.yaml)
     "beach": {"light": 2},
     "tourist": {"lost": 1, "light": 1},
@@ -100,6 +104,7 @@ ORBIT_VOTES = {
     "rugged": {"escape": 2},
     "motorcycle": {"escape": 1, "social": 1},
     "vintage": {"social": 1},
+    "compact": {"escape": 1, "social": 1},   # errands by day, friends/drives by night
     # the place itself (vibe: in cams.yaml) — nobody on Ocean Drive is
     # commuting to a night shift
     "beach": {"social": 2, "escape": 2, "work": -2, "school": -1},
@@ -139,6 +144,7 @@ TEMPERS = {
     "light": {
         "windows down on principle", "easy for once",
         "old friends by accident", "a regular the cafe knows by order",
+        "the radio up past all sense",
         "Borrowed", "Optimist",
     },
     "restless": {
@@ -171,6 +177,9 @@ TEMPERS = {
         "a crossword, in pen", "reading the same page twice",
         "texting someone they shouldn't", "watching their stop go by on purpose",
         "a person with nowhere to be",
+        "singing in the car like nobody can see in",
+        "lonely in the way a new city makes you",
+        "a song they'd never admit to, loud",
         "to the appointment they rescheduled twice", "the hospital",
         "Quiet", "Second-Guessing", "Stranger", "Witness",
     },
@@ -200,6 +209,8 @@ ORBITS = {
         "to the pharmacy before it closes", "to return the drill",
         "to the grocery store, list forgotten", "to pick up the cake",
         "groceries in their lap",
+        "running an errand only she would call urgent",
+        "a glovebox full of half-finished errands",
         "Errand-Runner",
     },
     "home": {
@@ -216,6 +227,8 @@ ORBITS = {
         "a lunch that's really a favor", "the gym", "to the gym",
         "on the way to a first date", "old friends by accident",
         "holding flowers wrong",
+        "off to see the handful of friends she's made",
+        "a date she hasn't mentioned to the group chat",
         "Visitor", "Guest",
     },
     "escape": {
