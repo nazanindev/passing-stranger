@@ -30,29 +30,29 @@ class NarrationManager:
         self.vibe = vibe                  # the place's character (beach, tourist…)
         self.region = region              # local flavor (a Wawa run needs a Wawa)
 
-    def _behavior(self, t: Track, pack_median: float) -> str:
+    def _behavior(self, t: Track, pack_median: float, fps: float) -> str:
         """A driving-behavior read, relative to the other cars on screen."""
         d = t.recent_deltas()
         if d and max(d) > 12 and min(d) < 2.5:
             return "stop and go"
-        if pack_median > 0.6:
-            r = t.avg_speed() / pack_median
+        if pack_median > 0.3:                     # body-lengths/sec (see observe)
+            r = t.avg_speed(fps) / pack_median
             if r > 1.7:
                 return "flooring it"
             if r < 0.5:
                 return "dawdling"
         return ""
 
-    def _person_mood(self, t: Track) -> str:
-        s = t.avg_speed()
-        if s < 1.5:
+    def _person_mood(self, t: Track, fps: float) -> str:
+        s = t.avg_speed(fps)                       # body-lengths/sec
+        if s < 0.35:
             return "waiting"
-        if s > 6:
+        if s > 1.5:
             return "hurrying"
         return "ambling"
 
     @staticmethod
-    def _parked(t: Track) -> bool:
+    def _parked(t: Track, fps: float) -> bool:
         """A vehicle that never went anywhere: near-zero net travel over a
         sustained watch, and still now. Parked cars aren't passing strangers —
         they're scenery, and re-reading the same one into a new life every time
@@ -62,7 +62,7 @@ class NarrationManager:
         return (t.cls_name != "person"
                 and t.frames_seen >= 6
                 and t.direction() in ("stationary", "barely moving")
-                and t.avg_speed() < 1.5)
+                and t.avg_speed(fps) < 0.15)
 
     @staticmethod
     def _twin(a: tuple, b: tuple) -> float:
@@ -89,7 +89,7 @@ class NarrationManager:
                 continue
             # a parked car is scenery, not a passing stranger — no overlay, and
             # so no new life rolled each time it's re-acquired
-            if self._parked(t):
+            if self._parked(t, fps):
                 continue
             # note: we no longer cull a low-confidence track here — a shape the
             # detector half-doubts (the lamppost read as a person) is KEPT and
@@ -101,7 +101,7 @@ class NarrationManager:
             shown.append(t)
             if len(shown) == self.max_shown:
                 break
-        speeds = [t.avg_speed() for t in tracks.values()
+        speeds = [t.avg_speed(fps) for t in tracks.values()
                   if t.cls_name != "person" and t.frames_seen >= 4]
         pack_median = statistics.median(speeds) if speeds else 0.0
 
@@ -119,7 +119,16 @@ class NarrationManager:
         tags = [scene["tempo"], scene["light"]]
         if scene.get("weekend"):
             tags.append("weekend")
-        scene_tags = [t_ for t_ in tags if t_]
+        base_tags = [t_ for t_ in tags if t_]
+
+        # foot traffic is its own evidence. The tempo tags above count only
+        # vehicles, so a street thick with people but empty of cars still reads
+        # "an empty street" — and its solitude phrases ("no audience but the
+        # camera") would be a plain lie. Count the people on screen so the
+        # solitude/pedestrian reads stay honest per subject.
+        people = sum(1 for t in tracks.values()
+                     if t.cls_name == "person" and cur - t.last_frame <= 2)
+        _SOLITUDE = {"an empty street", "a quiet road"}
 
         overlays = []
         for t in shown:
@@ -128,11 +137,18 @@ class NarrationManager:
             feats["vibe"] = self.vibe
             feats["region"] = self.region
             feats["scene"] = scene
-            feats["scene_tags"] = scene_tags
+            tags_t = list(base_tags)
+            if people >= 2:                       # not out here alone
+                tags_t = [x for x in tags_t if x not in _SOLITUDE]
+                # a car actually among the crowd may speak of it (never a racer,
+                # who isn't yielding to anyone)
+                if t.cls_name != "person" and t.speed(fps) != "racing":
+                    tags_t.append("pedestrians")
+            feats["scene_tags"] = tags_t
             if t.cls_name == "person":
-                feats["mood"] = self._person_mood(t)
+                feats["mood"] = self._person_mood(t, fps)
             else:
-                feats["behavior"] = self._behavior(t, pack_median)
+                feats["behavior"] = self._behavior(t, pack_median, fps)
             # a story is earned only once the read is both long enough AND sure
             # enough — a half-doubted shape keeps thinking (and second-guessing
             # itself) forever rather than being handed a soul it didn't earn

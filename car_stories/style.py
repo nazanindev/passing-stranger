@@ -35,7 +35,8 @@ FINE_KIND = {
     "sports_car": "showoff", "convertible": "showoff", "racer": "showoff",
     "limousine": "wealth",
     "cab": "cabbie",
-    "police_van": "duty", "ambulance": "duty", "fire_engine": "duty",
+    "police_van": "cop",
+    "ambulance": "duty", "fire_engine": "duty",
     "pickup": "tradesman", "tow_truck": "tradesman",
     "garbage_truck": "labor", "trailer_truck": "trucker",
     "jeep": "rugged",
@@ -175,6 +176,25 @@ WHO = {
                "forty stories a shift, none theirs", "a map of the city kept in the hands"],
     "duty": ["someone's worst day", "on the clock for a crisis", "paid to arrive fast",
              "the calm voice in the front"],
+    # the cop is the one subject that is also a watcher — the machine sees a lot
+    # of them, so the pool runs deep (an hour of squad cars shouldn't lap itself).
+    # this is the piece's designated mirror: the watcher-thread runs richer here
+    # than the rationed ache does elsewhere — the machine that invents lives off a
+    # camera, reading the thing that reads us back — but the bulk stays mundane so
+    # the mirror lands instead of lecturing.
+    "cop": ["a badge and a long shift", "paid to be seen", "the beat, mostly boredom",
+            "someone's authority, idling", "twenty years to the pension",
+            "a rookie learning the quiet blocks", "a thermos and a good vantage",
+            "an hour of paperwork in a uniform", "a local everyone knows and no one waves to",
+            "a training officer and a nervous partner", "someone's whole idea of Tuesday",
+            "counting down to the coffee, or the pension",
+            "a name badge nobody reads", "a slow day they won't admit to hoping for",
+            # the watcher, watched — the surveillance thread runs deeper here
+            "another camera on the same corner", "reading plates, and read in turn",
+            "the watcher, watched for once", "a lens that happens to drive",
+            "a database with a siren", "keeping the same logs this machine keeps",
+            # the rationed ache
+            "a call they'll carry home", "one bad night they don't talk about"],
     "tradesman": ["tools in the back", "works with his hands", "a life of loading and unloading",
                   "an invoice riding shotgun"],
     "labor": ["the unglamorous shift", "up before the city", "the work nobody thanks",
@@ -208,6 +228,35 @@ KIND_EMOTION = {  # keyed by speed (behavior folds into speed via BEH_TO_SPEED)
         "crawling": ["easing through the scene", "the slow part of a bad night"],
         "_": ["on standby", "waiting for the radio to ruin the quiet"],
     },
+    "cop": {  # on the job, so never "errands" — and half its feeling is watching.
+              # cruising is where a patrol car mostly lives, so that key runs deepest.
+        "racing": ["lights on, someone called", "a call that came in hot",
+                   "first to the thing nobody wants to see", "the radio turned it urgent",
+                   "somewhere they have to be before it's worse",
+                   "a code that clears the intersection",
+                   "running toward what everyone runs from"],
+        "cruising": ["the patrol, uneventful", "a slow loop of the same streets",
+                     "windows down, just watching", "clocking every face out of habit",
+                     "the block memorized years ago", "nothing to report, and grateful",
+                     "eyes moving, car barely", "the same route, a different day",
+                     "reading the street like a page they've read before",
+                     "a nod to the crossing guard", "watching for the one thing out of place",
+                     "everyone slowing down as they pass",
+                     # the watcher-thread, threaded through the common key
+                     "cataloguing the ordinary", "logging faces it'll never place",
+                     "the mirror doing half the work"],
+        "crawling": ["the speed trap, patient", "easing through the school zone",
+                     "idling where the street can see them", "running a plate at the light",
+                     "parked at an angle that means business",
+                     "clocking speeds with nowhere to be", "the radar gun doing the waiting",
+                     "watching the crosswalk win",
+                     "stuck in the same traffic they'd ticket you for"],
+        "_": ["posted at the corner, watching", "engine running, going nowhere",
+              "parked in the shade, logging the block", "lights off, presence on",
+              "a parked deterrent", "the corner car, part of the furniture now",
+              "the long stakeout of an ordinary afternoon",
+              "watching the watchers watch back"],
+    },
     "trucker": {
         "racing": ["a deadline two states wide", "making up an hour lost at the scales"],
         "cruising": ["dead center of a long haul", "coffee, centerline, repeat",
@@ -234,6 +283,11 @@ KIND_EMOTION = {  # keyed by speed (behavior folds into speed via BEH_TO_SPEED)
 KIND_PURPOSE = {  # flat — the job overrides the time of day
     "cabbie": ["a fare", "the airport run", "whoever waves next", "the bar crowd, later"],
     "duty": ["the call", "someone's emergency"],
+    "cop": ["a wellness check", "the plate that came back wrong",
+            "the last hour of the shift", "the corner they always sit",
+            "a noise complaint, probably nothing", "the same address as last week",
+            "a report that writes itself", "shift change, and coffee first",
+            "the school zone at three", "nothing, officially"],
     "trucker": ["a dock two states away", "the last leg"],
     "mover": ["the new place", "a lease that starts today"],
     "labor": ["the route", "the transfer station"],
@@ -241,6 +295,14 @@ KIND_PURPOSE = {  # flat — the job overrides the time of day
 
 KIND_TOWARD = {
     "duty": ["toward the sirens' reason", "to arrive first and stay longest"],
+    "cop": ["toward whoever called", "back to the precinct, eventually",
+            "the same corner as always", "wherever the radio points",
+            "to the end of a quiet shift", "nowhere the dispatcher hasn't sent them",
+            "toward the report, then the lot, then home",
+            "to the next corner that can see them",
+            # mutual surveillance — the one subject that can see the lens
+            "eye to eye with the camera, neither blinking",
+            "past the same lens it never clocks"],
     "trucker": ["another state by morning", "wherever the load is due"],
     "mover": ["to an empty room that echoes", "toward a key that still sticks"],
     "labor": ["one block at a time", "to the yard by end of shift"],
@@ -249,6 +311,8 @@ KIND_TOWARD = {
 KIND_ARCHETYPE = {  # job kinds get named for the job, not a private drama
     "cabbie": ["The Meter Runner", "The City's Confessional", "The Night Fare"],
     "duty": ["The First to Arrive", "The Worst-Day Witness"],
+    "cop": ["The Long Watch", "The Beat Cop", "The Other Camera", "The Corner Car",
+            "The Speed Trap", "The Presence", "The One Who Watches Back"],
     "trucker": ["The Long Hauler", "The Centerline Monk"],
     "mover": ["The Fresh Start", "The Address Changer"],
     "labor": ["The Early Shift", "The Unthanked"],
@@ -318,7 +382,7 @@ EMOTION = {  # by speed — mostly mundane; one ache each, rationed.
                  "third cycle of the same red light",
                  "close enough to read bumper stickers",
                  "a car length gained, a car length lost",
-                 "patience by necessity", "watching the pedestrians win",
+                 "patience by necessity",
                  "too tired to arrive", "the procession, endless"],
     "_": ["not ready to go", "in no hurry to get out", "idling on it",
           "waiting on someone's front door", "double-parked and betting on it",
@@ -368,17 +432,21 @@ PURPOSE = {  # by actual time of day (each hour keeps a free line — any life f
 }
 
 # people on foot — their own voice
-PERSON_WHO = ["someone late for something", "a person with nowhere to be",
-              "a commuter on foot", "a local, unhurried", "a tourist",
-              "someone between appointments", "a worker on break",
+PERSON_WHO = ["someone late for something",
+              "a commuter on foot", "a tourist",
+              "someone between appointments",
               "a student, headphones in", "a regular the cafe knows by order",
               "somebody's neighbor", "a dog walker without the dog today",
               "a night-shifter heading in early",
               "a stranger everyone here has seen before",
               "a retired teacher who knows this block",
-              "someone walking off a big lunch",
-              "a new parent stealing an hour",
               "someone sought, without knowing it"]
+# identities that assume an unhurried gait — the narrator only draws these when
+# the evidence doesn't show someone hurrying (a runner or a cyclist, both of whom
+# reach us as a fast-moving "person", is never "a local, unhurried").
+PERSON_WHO_CALM = ["a person with nowhere to be", "a local, unhurried",
+                   "a worker on break", "someone walking off a big lunch",
+                   "a new parent stealing an hour"]
 PERSON_MOOD = {
     "waiting": ["waiting on someone", "killing time", "checking the time again",
                 "not sure they're in the right place",
@@ -523,6 +591,10 @@ SCENE_PHRASE = {  # keyed by the scene tags narration.py derives from the stream
                         "among the multitude"],
     "the crawl": ["one brake light among hundreds", "boxed in on every side",
                   "part of the long red river"],
+    # only tagged for a non-racing vehicle when people are actually on foot in
+    # frame — so "watching the pedestrians win" never lands on an empty road
+    "pedestrians": ["watching the pedestrians win", "waiting on the crossing",
+                    "yielding to the crowd", "the crosswalk full, for now"],
     "dark": ["headlights doing the seeing", "past the lit windows"],
     "dim": ["under a flat gray sky", "in the day's last usable light"],
     "bright": ["squinting into the glare", "in hard daylight"],

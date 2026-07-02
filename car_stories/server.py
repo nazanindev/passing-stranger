@@ -130,9 +130,20 @@ class Session:
                               locale=self.cam.get("locale", "default"),
                               vibe=self.cam.get("vibe", ""),
                               region=self.cam.get("region", ""))
+        # speed is a rate, so it needs the real interval between processed frames
+        # — not a nominal 15fps. A snapshot cam ticks every `interval`s; a video
+        # cam runs as fast as inference allows. Measure it live (EMA-smoothed) so
+        # the same body-lengths/sec thresholds read true on either.
+        default_fps = (1.0 / self.cam.get("interval", 1.0)
+                       if self.cam.get("type") == "snapshot" else 15.0)
+        ema_fps, prev_t = default_fps, None
         for idx, frame in enumerate(_frames(self.cam, self.stop)):
             if self.stop.is_set():
                 break
+            now = time.monotonic()
+            if prev_t is not None and now > prev_t:
+                ema_fps = 0.85 * ema_fps + 0.15 * min(60.0, 1.0 / (now - prev_t))
+            prev_t = now
             if frame.shape[1] > MAX_WIDTH:
                 s = MAX_WIDTH / frame.shape[1]
                 frame = cv2.resize(frame, (MAX_WIDTH, int(frame.shape[0] * s)))
@@ -140,7 +151,7 @@ class Session:
             # the day of week, and how much light the street actually has
             scene = _scene_clock(self.cam.get("tz"))
             scene["brightness"] = float(frame[::16, ::16].mean())
-            overlays = nm.step(tracker.update(frame, idx), fps=15.0, scene=scene)
+            overlays = nm.step(tracker.update(frame, idx), fps=ema_fps, scene=scene)
             composed = draw_live(frame, overlays)
             ok, buf = cv2.imencode(".jpg", composed, [cv2.IMWRITE_JPEG_QUALITY, 70])
             if not ok:

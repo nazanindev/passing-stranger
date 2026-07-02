@@ -298,7 +298,7 @@ def _style_lines() -> set:
     out: set = set()
     for pool in (style.WHO, style.EMOTION, style.BEHAVIOR_EMOTION, style.PURPOSE,
                  style.TOWARD, style.BUS_LIVES, style.KIDS_LIVES, style.PERSON_WHO,
-                 style.PERSON_MOOD, style.ARCH_ADJ, style.ARCH_NOUN,
+                 style.PERSON_WHO_CALM, style.PERSON_MOOD, style.ARCH_ADJ, style.ARCH_NOUN,
                  style.KIND_EMOTION, style.KIND_PURPOSE, style.KIND_TOWARD,
                  style.KIND_ARCHETYPE):
         flatten(pool, out)

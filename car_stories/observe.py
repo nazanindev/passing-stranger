@@ -28,6 +28,7 @@ class Track:
     cls_name: str
     first_frame: int
     centers: list[tuple[float, float]] = field(default_factory=list)
+    sizes: list[float] = field(default_factory=list)   # on-screen length per frame
     last_frame: int = 0
     last_box: tuple[int, int, int, int] = (0, 0, 0, 0)
     color: str = "unknown"
@@ -59,17 +60,33 @@ class Track:
             return "eastbound" if dx > 0 else "westbound"
         return "approaching the camera" if dy > 0 else "heading away"
 
-    def speed(self) -> str:
-        if len(self.centers) < 2:
+    def _bl_per_sec(self, fps: float, n: int = 10) -> float:
+        """Speed in on-screen *body-lengths per second* — the honest unit.
+        Raw pixels-per-frame lies twice: a far car covers fewer pixels than a
+        near one at the same real speed (perspective), and a 2s-interval snapshot
+        cam covers far more per frame than a 15fps video (cadence). Dividing net
+        travel by the object's own size kills the first; multiplying by the real
+        frame rate kills the second. Net (first→last) displacement over the
+        window, not summed step magnitudes, so tracker jitter on a still car
+        doesn't accumulate into phantom motion."""
+        pts = self.centers[-(n + 1):]
+        szs = self.sizes[-(n + 1):]
+        if len(pts) < 2 or not szs:
+            return 0.0
+        steps = len(pts) - 1
+        disp = float(np.hypot(pts[-1][0] - pts[0][0], pts[-1][1] - pts[0][1]))
+        length = float(np.median(szs)) or 1.0
+        return (disp / length) * (max(fps, 1e-6) / steps)
+
+    def speed(self, fps: float) -> str:
+        # thresholds are body-lengths/sec (tunable): a city cruise is ~1.5–3,
+        # a crawl well under 1, a stop essentially 0.
+        v = self._bl_per_sec(fps)
+        if v < 0.12:
             return "still"
-        deltas = [
-            float(np.hypot(b[0] - a[0], b[1] - a[1]))
-            for a, b in zip(self.centers, self.centers[1:])
-        ]
-        avg = float(np.mean(deltas[-10:]))
-        if avg < 4:
+        if v < 0.7:
             return "crawling"
-        if avg < 18:
+        if v < 3.2:
             return "cruising"
         return "racing"
 
@@ -77,9 +94,9 @@ class Track:
         pts = self.centers[-(n + 1):]
         return [float(np.hypot(b[0] - a[0], b[1] - a[1])) for a, b in zip(pts, pts[1:])]
 
-    def avg_speed(self) -> float:
-        d = self.recent_deltas()
-        return float(np.mean(d)) if d else 0.0
+    def avg_speed(self, fps: float) -> float:
+        """Perspective- and cadence-normalized speed (body-lengths/sec)."""
+        return self._bl_per_sec(fps)
 
     def size(self) -> str:
         if self.rel_size > 0.045:
@@ -100,7 +117,7 @@ class Track:
             "vehicle_type": self.cls_name,
             "color": self.color,
             "direction": self.direction(),
-            "speed": self.speed(),
+            "speed": self.speed(fps),
             "size": self.size(),
             "lane": self.lane(),
             "fine_type": self.fine_type,
@@ -187,6 +204,7 @@ class Tracker:
             tr.cls_name = max(tr.class_votes, key=tr.class_votes.get)  # majority over time
             tr.confs.append(float(conf))
             tr.centers.append((cx, cy))
+            tr.sizes.append(float(np.hypot(x2 - x1, y2 - y1)))  # box diagonal ≈ length
             tr.last_frame = idx
             tr.last_box = (x1, y1, x2, y2)
             fh, fw = frame.shape[:2]

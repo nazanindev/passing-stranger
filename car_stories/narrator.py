@@ -206,8 +206,13 @@ class Narrator:
         if features["vehicle_type"] == "person":
             walk = features.get("mood", "ambling")  # gait, not the correlator's read
 
+            # unhurried identities are honest only if the gait isn't hurried —
+            # a runner or cyclist (a fast "person") never reads as "unhurried"
+            who_pool = style.PERSON_WHO + (
+                style.PERSON_WHO_CALM if walk != "hurrying" else [])
+
             def roll_person():
-                attrs = {"who": _weave(rng, style.PERSON_WHO, actives, self._clauses),
+                attrs = {"who": _weave(rng, who_pool, actives, self._clauses),
                          "mood": _weave(rng, style.PERSON_MOOD[walk], actives,
                                         self._clauses),
                          "toward": _weave(rng, style.TOWARD
