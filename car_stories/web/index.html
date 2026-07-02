@@ -71,7 +71,12 @@ const grid=document.getElementById('grid'), clipbtn=document.getElementById('cli
 const statustext=document.getElementById('statustext'), camline=document.getElementById('camline');
 const livedot=document.getElementById('livedot');
 let currentCam=null, gallerySeen=new Set(), retryTimer=null, mode='stream';
-const isCurator=['localhost','127.0.0.1'].includes(location.hostname);
+// the curator's browser: localhost, or a one-time visit with ?key=<token>
+const urlKey=new URLSearchParams(location.search).get('key');
+if(urlKey){localStorage.setItem('curator',urlKey);
+  history.replaceState(null,'',location.pathname);}
+const curatorKey=localStorage.getItem('curator')||'';
+const isCurator=['localhost','127.0.0.1'].includes(location.hostname)||!!curatorKey;
 
 function addTile(url, front){
   if(gallerySeen.has(url)) return;
@@ -90,7 +95,8 @@ clipbtn.onclick=async ()=>{
   c.width=cv.naturalWidth; c.height=cv.naturalHeight;
   c.getContext('2d').drawImage(cv,0,0);
   const b64=c.toDataURL('image/jpeg',0.9).split(',')[1];
-  const r=await fetch('/clip',{method:'POST',headers:{'Content-Type':'application/json'},
+  const r=await fetch('/clip',{method:'POST',
+    headers:{'Content-Type':'application/json','X-Curator':curatorKey},
     body:JSON.stringify({jpeg:b64})});
   const {url}=await r.json();
   addTile(url, true);

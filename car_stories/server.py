@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as _dt
+import os
 import pathlib
 import threading
 import time
@@ -31,6 +32,16 @@ WEB = pathlib.Path(__file__).resolve().parent / "web"
 GALLERY = ROOT / "out" / "gallery"
 GALLERY.mkdir(parents=True, exist_ok=True)
 MAX_WIDTH = 960
+
+# deployment knobs — a laptop takes the defaults; a small CPU server sets
+# CS_MODEL=yolo11s.pt CS_IMGSZ=640 CS_CLASSIFY=0 and stays afloat
+MODEL = os.environ.get("CS_MODEL", "yolo11m.pt")
+IMGSZ = int(os.environ.get("CS_IMGSZ", "960"))
+CLASSIFY = os.environ.get("CS_CLASSIFY", "1") != "0"
+MAX_SESSIONS = int(os.environ.get("CS_MAX_SESSIONS", "4"))
+# behind a reverse proxy every client looks like loopback, so the curated
+# gallery needs a real key: set CS_CURATOR_TOKEN and clip with ?key=<token>
+CURATOR_TOKEN = os.environ.get("CS_CURATOR_TOKEN", "")
 
 # one storyteller for the whole house: its novelty memory spans cams, so
 # Tokyo and Miami don't tell the same life minutes apart
@@ -109,7 +120,7 @@ class Session:
             return self._latest
 
     def _run(self) -> None:
-        tracker = Tracker(classify=True)   # fine body-type on close crops
+        tracker = Tracker(model_path=MODEL, classify=CLASSIFY, imgsz=IMGSZ)
         default_min = 4 if self.cam.get("type") == "snapshot" else 12
         nm = NarrationManager(_narrator,
                               min_frames=self.cam.get("min_frames", default_min),
@@ -157,7 +168,11 @@ async def clip(request: Request, payload: dict = Body(...)):
     The gallery is curated by one person: only loopback may clip. (Behind a
     reverse proxy every client looks like loopback — the deploy must put this
     route behind auth or not proxy it at all.)"""
-    if request.client and request.client.host not in ("127.0.0.1", "::1"):
+    if CURATOR_TOKEN:
+        ok = request.headers.get("x-curator", "") == CURATOR_TOKEN
+    else:  # local dev: loopback is the curator
+        ok = bool(request.client) and request.client.host in ("127.0.0.1", "::1")
+    if not ok:
         return JSONResponse({"error": "the gallery is curated"}, status_code=403)
     data = payload.get("jpeg", "")
     if "," in data:
@@ -173,10 +188,13 @@ _sessions: dict[str, Session] = {}
 _sessions_lock = threading.Lock()
 
 
-def _acquire(cam: dict) -> Session:
+def _acquire(cam: dict) -> Session | None:
     with _sessions_lock:
         s = _sessions.get(cam["id"])
         if s is None or s.stop.is_set():
+            live = sum(1 for x in _sessions.values() if not x.stop.is_set())
+            if live >= MAX_SESSIONS:
+                return None                # every tracker seat is taken
             s = Session(cam)
             _sessions[cam["id"]] = s
             s.start()
@@ -202,6 +220,8 @@ async def stream(cam: str | None = None):
     cam_id = cam or config.get("default")
     chosen = next((c for c in config["cams"] if c["id"] == cam_id), config["cams"][0])
     session = _acquire(chosen)
+    if session is None:                    # full house — the client retries
+        return JSONResponse({"error": "every seat taken"}, status_code=503)
 
     async def gen():
         last_seq = -1
@@ -224,8 +244,10 @@ async def stream(cam: str | None = None):
 
 def main() -> None:
     import uvicorn
-    print("car-stories viewer → http://127.0.0.1:8000")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    host = os.environ.get("CS_HOST", "127.0.0.1")
+    port = int(os.environ.get("CS_PORT", "8000"))
+    print(f"passing stranger → http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":
