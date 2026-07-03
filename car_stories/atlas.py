@@ -12,8 +12,17 @@ return plain values so a prettier renderer can reuse them.
 """
 from __future__ import annotations
 
+import os
+
 from . import correlator as C
 from . import style
+
+# mirrors server.py: the ImageNet body classifier only runs when CS_CLASSIFY is
+# on. With it off (the small-CPU prod setting), fine_type is always empty, so
+# every kind reachable *only* through a close-crop body-type is unreachable —
+# the atlas grays those out instead of pretending they fire. Run
+# `CS_CLASSIFY=0 python -m car_stories.atlas` to see the live roster.
+_CLASSIFY = os.environ.get("CS_CLASSIFY", "1") != "0"
 
 # reach mirrors kind_of(): fine-body kinds surface only on a close crop (rare on
 # a traffic cam); the coarse type+size buckets and the cheap yellow reads are
@@ -169,18 +178,25 @@ def render() -> str:
     # roster, grouped by reach (no repeated reach column)
     rows = roster_rows()
     L.append(_head("CHARACTERS"))
+    if not _CLASSIFY:
+        L.append("  ⚠ CS_CLASSIFY=0 — body classifier OFF: the classifier group is DARK,")
+        L.append("    never reached. Only coarse type+size and the yellow read fire live.")
     L.append(_roster_line("", "WHO", "E", "P", "T", "arch", "", "detect →").rstrip())
-    for reach, label in (("common", "common — coarse type+size, or a cheap yellow read"),
-                         ("rare", "rare — only on a close crop (ImageNet body)")):
+    groups = (("common", "always on — coarse type+size, or the yellow read"),
+              ("rare", "needs the body classifier"
+                       + (" — DARK (CS_CLASSIFY=0)" if not _CLASSIFY else "")))
+    for reach, label in groups:
         L.append(f"  · {label}")
         for r in (x for x in rows if x["reach"] == reach):
             depth = "MULTI" if r["multi"] else str(r["depth"])
-            shallow = (not r["multi"] and r["reach"] == "common" and r["depth"] < 8)
+            dark = reach == "rare" and not _CLASSIFY
+            shallow = not r["multi"] and reach == "common" and r["depth"] < 8
+            flag = "×" if dark else "⚠" if shallow else ""
             L.append(_roster_line(
                 r["kind"], depth, _n(r["emotion"]), _n(r["purpose"]),
-                _n(r["toward"]), _n(r["arch"]), "⚠" if shallow else "",
-                r["detect"]))
-    L.append("  WHO=identity lines · E/P/T=telos pools · arch=archetypes · ⚠=common+shallow")
+                _n(r["toward"]), _n(r["arch"]), flag, r["detect"]))
+    L.append("  WHO=identity · E/P/T=telos pools · arch=archetypes"
+             " · ⚠=common+shallow · ×=dark")
 
     # temper × orbit — the bespoke-line radar
     L.append(_head("TEMPER × ORBIT"))
