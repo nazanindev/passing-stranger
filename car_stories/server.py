@@ -40,6 +40,10 @@ MAX_WIDTH = 960
 MODEL = os.environ.get("CS_MODEL", "yolo11m.pt")
 IMGSZ = int(os.environ.get("CS_IMGSZ", "960"))
 CLASSIFY = os.environ.get("CS_CLASSIFY", "1") != "0"
+# the body classifier's cost knobs — a light model and how often it may fire
+# (one crop per this many frames). Tuned so a CPU box can afford it.
+CLS_MODEL = os.environ.get("CS_CLS_MODEL", "yolo11s-cls.pt")
+CLS_EVERY = int(os.environ.get("CS_CLS_EVERY", "3"))
 MAX_SESSIONS = int(os.environ.get("CS_MAX_SESSIONS", "4"))
 # behind a reverse proxy every client looks like loopback, so the curated
 # gallery needs a real key: set CS_CURATOR_TOKEN and clip with ?key=<token>
@@ -140,7 +144,8 @@ class Session:
             return self._latest
 
     def _run(self) -> None:
-        tracker = Tracker(model_path=MODEL, classify=CLASSIFY, imgsz=IMGSZ)
+        tracker = Tracker(model_path=MODEL, classify=CLASSIFY, imgsz=IMGSZ,
+                          cls_model=CLS_MODEL, cls_every=CLS_EVERY)
         default_min = 4 if self.cam.get("type") == "snapshot" else 16
         nm = NarrationManager(_narrator,
                               min_frames=self.cam.get("min_frames", default_min),

@@ -158,13 +158,17 @@ class Tracker:
     """Wraps a YOLO model + ByteTrack; feed it frames, get accumulated tracks."""
 
     def __init__(self, model_path: str = "yolo11m.pt", classify: bool = False,
-                 imgsz: int = 960, device: str | None = None) -> None:
+                 imgsz: int = 960, device: str | None = None,
+                 cls_model: str = "yolo11s-cls.pt", cls_every: int = 3) -> None:
         import torch
         self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
         self.imgsz = imgsz
         self.model = YOLO(model_path)  # auto-downloads on first run
-        # optional body-type classifier — only useful on close/large crops
-        self.cls = YOLO("yolo11m-cls.pt") if classify else None
+        # optional body-type classifier — only useful on close/large crops. Kept
+        # cheap enough for a CPU box: a light model, and at most one crop per
+        # cls_every frames (see update()).
+        self.cls = YOLO(cls_model) if classify else None
+        self.cls_every = cls_every
         self.tracks: dict[int, Track] = {}
 
     def update(self, frame: np.ndarray, idx: int = 0) -> dict[int, Track]:
@@ -212,20 +216,30 @@ class Tracker:
             tr.rel_x = cx / float(fw)
             if tr.color == "unknown" and (x2 - x1) * (y2 - y1) > 1500:
                 tr.color = _dominant_color(frame, (x1, y1, x2, y2))
-            # classify body-type once, only when the crop is big enough to be legible
-            # (0.02 ≈ a car filling a seventh of the frame edge-to-edge; below that
-            # ImageNet is dice, and dice is the narrator's job)
-            if (self.cls is not None and tr.cls_name != "person" and not tr.fine_type
-                    and tr.rel_size > 0.02 and tr.frames_seen % 4 == 0
-                    and (x2 - x1) >= 24 and (y2 - y1) >= 24):
-                crop = frame[max(0, y1):y2, max(0, x1):x2]
-                if crop.size:
-                    pr = self.cls(crop, verbose=False, device=self.device)[0].probs
-                    name_ = self.cls.names[int(pr.top1)]
-                    # keep only vehicle-ish reads we have opinions about — ImageNet
-                    # on small crops happily answers "container_ship" for a sedan
-                    if float(pr.top1conf) > 0.35 and name_ in style.FINE_KIND:
-                        tr.fine_type = name_
+
+        # body-type: at most ONE crop classified per `cls_every` frames — the
+        # largest close vehicle not yet read. A track keeps its read once made, so
+        # every close car gets classified within a second or two, but the extra
+        # inference is a fixed budget regardless of how heavy the traffic is (the
+        # old per-track path could fire a dozen times in one busy frame — the
+        # reason this had to be off on a CPU box). 0.02 ≈ a car filling a seventh
+        # of the frame edge-to-edge; below that ImageNet is dice.
+        if self.cls is not None and idx % self.cls_every == 0:
+            elig = [self.tracks[t] for t in present]
+            elig = [tr for tr in elig if tr.cls_name != "person"
+                    and not tr.fine_type and tr.rel_size > 0.02]
+            if elig:
+                tr = max(elig, key=lambda t: t.rel_size)
+                x1, y1, x2, y2 = tr.last_box
+                if (x2 - x1) >= 24 and (y2 - y1) >= 24:
+                    crop = frame[max(0, y1):y2, max(0, x1):x2]
+                    if crop.size:
+                        pr = self.cls(crop, verbose=False, device=self.device)[0].probs
+                        name_ = self.cls.names[int(pr.top1)]
+                        # ImageNet on a small crop happily says "container_ship" for
+                        # a sedan — keep only bodies we have opinions on
+                        if float(pr.top1conf) > 0.35 and name_ in style.FINE_KIND:
+                            tr.fine_type = name_
 
         # forget tracks that have been gone a while (keeps the dict bounded)
         for tid in list(self.tracks):
