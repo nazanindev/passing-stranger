@@ -1,64 +1,46 @@
 """A generated map of the taste — run `python -m car_stories.atlas`.
 
-Nothing here is authored. It reads the pools in style.py and the vote/claim
-tables in correlator.py and reports their *shape*: which characters exist and
-how deep, which (feeling × focus) reads have a voice, and which observed signals
-still don't vote. The map can't drift, because the code it maps IS the taste.
+Not a metrics dashboard: it *runs the narrator* and shows the real lines each
+character says, so you design by reading voice. Two views:
 
-Use it while designing: a common character with a shallow pool will lap; an empty
-temper×orbit cell is a mood the machine can read but can't yet say; an idle
-signal is a lever you haven't pulled. The data functions (roster_rows, etc.)
-return plain values so a prettier renderer can reuse them.
+  CHARACTERS — every kind as a sheet: when it's seen, how deep, and actual
+               sampled lines across day / night / rush, so you can hear it.
+  WORKLIST   — where the voice is thin (a pool that repeats on screen) or
+               generic (an identity with no situational lines of its own).
+
+Nothing here is authored; it reads the pools in style.py + correlator.py and the
+same kind_of()/narrate() the live site uses, so it can't drift. Seeded, so a run
+is a stable snapshot.
 """
 from __future__ import annotations
 
 import os
+import random
 
-from . import correlator as C
+from . import correlator as C  # noqa: F401  (kept for parity / future views)
 from . import style
+from .narrator import Narrator
 
 # mirrors server.py: the ImageNet body classifier only runs when CS_CLASSIFY is
-# on. With it off (the small-CPU prod setting), fine_type is always empty, so
-# every kind reachable *only* through a close-crop body-type is unreachable —
-# the atlas grays those out instead of pretending they fire. Run
-# `CS_CLASSIFY=0 python -m car_stories.atlas` to see the live roster.
+# on. With it off, fine_type is always empty, so classifier-only kinds are dark.
 _CLASSIFY = os.environ.get("CS_CLASSIFY", "1") != "0"
 
-# reach mirrors kind_of(): fine-body kinds surface only on a close crop (rare on
-# a traffic cam); the coarse type+size buckets and the cheap yellow reads are
-# common. This is the one hand-kept surface — small and stable. Everything else
-# is derived from the pools themselves.
+# reach mirrors kind_of(): coarse type+size and the yellow reads are always live;
+# fine bodies need a close crop (the classifier). Small, stable; the rest derived.
 _COARSE = {"hauler", "compact", "sedan", "truck", "bus", "motorcycle"}
 _HEURISTIC = {"cabbie": "yellow car+US", "kids": "yellow bus+US"}
 
-# observed attributes and their value spaces — mirrors observe.py / narration.py.
-# used only to check which signals reach the vote tables (utilization).
-_OBSERVABLES = {
-    "speed": ["still", "crawling", "cruising", "racing"],
-    "behavior": ["flooring it", "dawdling", "stop and go"],
-    "color": ["black", "white", "silver", "red", "orange", "yellow", "green",
-              "blue", "purple"],
-    "direction": ["stationary", "barely moving", "eastbound", "westbound",
-                  "approaching the camera", "heading away"],
-    "size": ["big", "midsize", "small"],
-    "lane": ["left lane", "center lane", "right lane"],
-    "time_of_day": ["the small hours", "morning", "midday", "late afternoon",
-                    "evening", "night"],
-    "day": ["weekday", "weekend"],
-    "scene tempo": ["an empty street", "a quiet road", "the thick of it",
-                    "the crawl"],
-    "scene light": ["dark", "dim", "bright"],
-    "mood (person)": ["waiting", "hurrying", "ambling"],
-    "vibe": ["beach", "tourist", "downtown", "freeway"],
-    "region": sorted(style.REGION_FLAVOR),
-}
+# the three contexts each sheet is sampled in — enough to hear the range
+_SCENES = (("day", "midday", "cruising"),
+           ("night", "night", "cruising"),
+           ("rush", "morning", "racing"))
+_PERSON_SCENES = (("amble", "midday", "ambling"),
+                  ("hurry", "morning", "hurrying"),
+                  ("wait", "evening", "waiting"))
 
-# display orders — the readable arrangement, not the tiebreak order
-_TEMPERS = ["harried", "dutiful", "steady", "weary", "light", "restless",
-            "tender", "lost", "quiet"]
-_ORBITS = ["work", "school", "errands", "home", "social", "escape", "nowhere"]
 
-_THIN = 6   # a temper/orbit with fewer claimed lines than this is under-voiced
+def _head(title: str) -> str:
+    return f"\n{title} " + "─" * max(0, 65 - len(title))
 
 
 # --- kinds --------------------------------------------------------------------
@@ -71,157 +53,132 @@ def _all_kinds() -> list[str]:
 
 def _reach(kind: str) -> tuple[str, str]:
     fine = sorted(ft for ft, k in style.FINE_KIND.items() if k == kind)
-    if kind in _COARSE:
+    if kind in _HEURISTIC:
+        note = _HEURISTIC[kind]
+    elif kind in _COARSE:
         note = "coarse type+size"
-    elif kind in _HEURISTIC:
-        note = _HEURISTIC[kind] + (" +" + ",".join(fine) if fine else "")
     else:
         note = ",".join(fine) or "—"
-    common = kind in _COARSE or kind in _HEURISTIC
-    return ("common" if common else "rare"), note
+    return ("common" if kind in _COARSE or kind in _HEURISTIC else "rare"), note
 
 
-def _depth(kind: str) -> int | None:
-    """Identity-pool depth: WHO size, or the shared-lives pool for MULTI kinds."""
+def _depth(kind: str) -> int:
     if kind in style.MULTI:
         return len(style.MULTI_LIVES.get(kind, style.BUS_LIVES))
-    return len(style.WHO[kind]) if kind in style.WHO else None
+    return len(style.WHO.get(kind, []))
 
 
-def _telos(kind: str) -> tuple[int, int, int, int]:
-    e = sum(len(v) for v in style.KIND_EMOTION.get(kind, {}).values())
-    return (e, len(style.KIND_PURPOSE.get(kind, [])),
-            len(style.KIND_TOWARD.get(kind, [])),
-            len(style.KIND_ARCHETYPE.get(kind, [])))
+def _has_telos(kind: str) -> bool:
+    return kind in style.KIND_EMOTION
 
 
 def roster_rows() -> list[dict]:
     rows = []
     for k in _all_kinds():
         reach, note = _reach(k)
-        e, p, t, a = _telos(k)
-        rows.append({"kind": k, "reach": reach, "detect": note,
-                     "depth": _depth(k), "multi": k in style.MULTI,
-                     "emotion": e, "purpose": p, "toward": t, "arch": a})
-    # common first, then deepest — the "seen a lot, said thinly" risks float up
-    rows.sort(key=lambda r: (r["reach"] != "common", -(r["depth"] or 0)))
+        rows.append({"kind": k, "reach": reach, "detect": note, "depth": _depth(k),
+                     "multi": k in style.MULTI, "telos": _has_telos(k)})
+    rows.sort(key=lambda r: (r["reach"] != "common", -r["depth"]))
     return rows
 
 
-def _laps(depth: int | None) -> str:
-    if depth is None:
-        return "—"
-    return "laps" if depth < 8 else "ok" if depth < 20 else "deep"
+# --- turn a kind into features the narrator will read as that kind ------------
+def _features_for(kind: str) -> dict:
+    base = {"color": "silver", "direction": "heading away", "speed": "cruising",
+            "size": "midsize", "lane": "", "fine_type": "", "time_of_day": "midday",
+            "confidence": 0.9, "locale": "default", "vibe": "", "region": "",
+            "behavior": None, "scene": {}, "scene_tags": ()}
+    if kind == "cabbie":
+        base.update(vehicle_type="car", color="yellow")
+    elif kind == "kids":
+        base.update(vehicle_type="bus", color="yellow")
+    elif (fine := [ft for ft, k in style.FINE_KIND.items() if k == kind]):
+        base.update(vehicle_type="car", fine_type=fine[0])
+    elif kind in ("truck", "bus", "motorcycle"):
+        base.update(vehicle_type=kind)
+    elif kind == "hauler":
+        base.update(vehicle_type="car", size="big")
+    elif kind == "compact":
+        base.update(vehicle_type="car", size="small")
+    else:  # sedan
+        base.update(vehicle_type="car", size="midsize")
+    return base
 
 
-# --- temper × orbit coverage --------------------------------------------------
-def temper_counts() -> dict[str, int]:
-    return {t: len(C.TEMPERS.get(t, ())) for t in _TEMPERS}
-
-
-def orbit_counts() -> dict[str, int]:
-    return {o: len(C.ORBITS.get(o, ())) for o in _ORBITS}
-
-
-def matrix() -> dict[tuple[str, str], int]:
-    """Dedicated lines per (temper, orbit): lines claimed by that temper AND that
-    orbit — the ones that pin an exact life ("on the way to a first date" is
-    tender+social). A 0 cell is a feeling×focus the machine can read but has no
-    bespoke word for — the design gap. (Every read still draws deep generic
-    pools; this is only the specifically-pinned layer.)"""
-    tl = {t: set(C.TEMPERS.get(t, ())) for t in _TEMPERS}
-    ol = {o: set(C.ORBITS.get(o, ())) for o in _ORBITS}
-    return {(t, o): len(tl[t] & ol[o]) for t in _TEMPERS for o in _ORBITS}
-
-
-# --- signal utilization -------------------------------------------------------
-def signal_use() -> list[dict]:
-    out = []
-    for attr, values in _OBSERVABLES.items():
-        vals = set(values)
-        temp = len(vals & set(C.TEMPER_VOTES))
-        orb = len(vals & set(C.ORBIT_VOTES))
-        out.append({"attr": attr, "n": len(vals), "temper": temp, "orbit": orb})
+def sample_voice(kind: str, scenes, is_person: bool = False, per: int = 2) -> list[tuple]:
+    """Real narrator output for this kind, grouped by scene. Returns
+    [(scene_label, [line, ...]), ...] — the character's actual voice."""
+    narr = Narrator()
+    seen: set[str] = set()
+    out, tid = [], 0
+    for label, tod, sp in scenes:
+        picks: list[str] = []
+        for _ in range(16):
+            f = _features_for("__person__" if is_person else kind)
+            if is_person:
+                f.update(vehicle_type="person", color="unknown", mood=sp)
+            else:
+                f.update(speed=sp)
+            f.update(time_of_day=tod)
+            line = narr.narrate((kind, label, tid), f)["lines"][0]
+            tid += 1
+            if line not in seen:
+                seen.add(line)
+                picks.append(line)
+            if len(picks) >= per:
+                break
+        out.append((label, picks))
     return out
 
 
-# --- line inventory -----------------------------------------------------------
-def inventory() -> dict[str, int]:
-    lines = C._style_lines()
-    claimed = {e for e in lines if C.claims(e)}
-    return {"lines": len(lines), "claimed": len(claimed),
-            "free": len(lines) - len(claimed)}
-
-
 # --- render -------------------------------------------------------------------
-_ABBR = {"work": "work", "school": "schl", "errands": "errd", "home": "home",
-         "social": "socl", "escape": "escp", "nowhere": "nowh"}
-
-
-def _head(title: str) -> str:
-    return f"\n{title} " + "─" * max(0, 65 - len(title))
-
-
-def _n(x) -> str:            # a 0 reads as clutter; dot it out
-    return "·" if not x else str(x)
-
-
-def _roster_line(k, w, e, p, t, a, flag, note) -> str:
-    return f"  {k:<11}{w:>5}{e:>4}{p:>4}{t:>4}{a:>5}   {flag:<2}{note}"
-
-
 def render() -> str:
-    L: list[str] = []
-    L.append("PASSING STRANGER · taste atlas")
-    L.append("generated from style.py + correlator.py — edit the pools, rerun me")
+    random.seed(7)  # stable snapshot
+    L: list[str] = ["PASSING STRANGER · taste atlas",
+                    "the narrator, sampled — the real voice of each character"]
 
-    # roster, grouped by reach (no repeated reach column)
-    rows = roster_rows()
+    # ---- CHARACTERS ----
     L.append(_head("CHARACTERS"))
     if not _CLASSIFY:
-        L.append("  ⚠ CS_CLASSIFY=0 — body classifier OFF: the classifier group is DARK,")
-        L.append("    never reached. Only coarse type+size and the yellow read fire live.")
-    L.append(_roster_line("", "WHO", "E", "P", "T", "arch", "", "detect →").rstrip())
-    groups = (("common", "always on — coarse type+size, or the yellow read"),
-              ("rare", "needs the body classifier"
-                       + (" — DARK (CS_CLASSIFY=0)" if not _CLASSIFY else "")))
-    for reach, label in groups:
-        L.append(f"  · {label}")
+        L.append("  CS_CLASSIFY=0 — × marks kinds that are dark (never reached live)")
+    rows = roster_rows()
+    for reach, label in (("common", "always live"),
+                         ("rare", "needs the classifier"
+                                  + (" — DARK" if not _CLASSIFY else ""))):
+        L.append(f"\n  ──────── {label} ────────")
         for r in (x for x in rows if x["reach"] == reach):
-            depth = "MULTI" if r["multi"] else str(r["depth"])
-            dark = reach == "rare" and not _CLASSIFY
-            shallow = not r["multi"] and reach == "common" and r["depth"] < 8
-            flag = "×" if dark else "⚠" if shallow else ""
-            L.append(_roster_line(
-                r["kind"], depth, _n(r["emotion"]), _n(r["purpose"]),
-                _n(r["toward"]), _n(r["arch"]), flag, r["detect"]))
-    L.append("  WHO=identity · E/P/T=telos pools · arch=archetypes"
-             " · ⚠=common+shallow · ×=dark")
+            dark = " ×" if (reach == "rare" and not _CLASSIFY) else ""
+            depth = "MULTI" if r["multi"] else f"{r['depth']} lines"
+            voice = "bespoke voice" if r["telos"] else "generic voice"
+            L.append(f"\n  {r['kind'].upper()}{dark}  ·  {r['detect']}  ·  {depth} · {voice}")
+            for scene_label, picks in sample_voice(r["kind"], _SCENES):
+                for i, line in enumerate(picks):
+                    L.append(f"    {scene_label if i == 0 else '':6} \"{line}\"")
 
-    # temper × orbit — the bespoke-line radar
-    L.append(_head("TEMPER × ORBIT"))
-    L.append("  bespoke lines pinned to a feeling × focus  (· = none written yet)")
-    L.append("  " + " " * 10 + "".join(f"{_ABBR[o]:>6}" for o in _ORBITS))
-    mx, tc = matrix(), temper_counts()
-    for t in _TEMPERS:
-        cells = "".join((f"{mx[(t, o)]:>6}" if mx[(t, o)] else "     ·")
-                        for o in _ORBITS)
-        L.append(f"  {t:<10}{cells}")
-    L.append("  orbit Σ    " + "  ".join(f"{_ABBR[o]}:{orbit_counts()[o]}" for o in _ORBITS))
-    L.append("  temper Σ   " + "  ".join(f"{t[:4]}:{tc[t]}" for t in _TEMPERS))
+    # persons — their own machinery, no kind
+    L.append("\n  ──────── on foot (person) ────────")
+    L.append("\n  PERSON  ·  someone walking  ·  17 lines · gait-keyed")
+    for scene_label, picks in sample_voice("person", _PERSON_SCENES, is_person=True):
+        for i, line in enumerate(picks):
+            L.append(f"    {scene_label if i == 0 else '':6} \"{line}\"")
 
-    # signals — voters vs idle
-    L.append(_head("SIGNALS"))
-    voters = [s for s in signal_use() if s["temper"] or s["orbit"]]
-    idle = [s for s in signal_use() if not (s["temper"] or s["orbit"])]
-    for s in voters:
-        L.append(f"  {s['attr']:14}temper {s['temper']}/{s['n']:<4}"
-                 f"orbit {s['orbit']}/{s['n']}")
-    L.append("  idle (seen, never votes): " + ", ".join(s["attr"] for s in idle))
+    # ---- WORKLIST ----
+    L.append(_head("WORKLIST — where the voice is thin or generic"))
+    laps = sorted((r for r in rows if not r["multi"] and r["depth"] < 12),
+                  key=lambda r: r["depth"])
+    L.append("\n  laps fast — identity pool repeats while a car is on screen:")
+    for r in laps:
+        tag = "" if r["reach"] == "common" else "  (rare — only when it appears)"
+        L.append(f"    {r['kind']:11}{r['depth']} lines{tag}")
+    generic = [r["kind"] for r in rows if not r["multi"] and not r["telos"]]
+    L.append("\n  generic voice — an identity, but no situational lines of its own")
+    L.append("  (says who it is, then leans on the shared emotion/purpose pools):")
+    L.append("    " + ", ".join(generic))
+    bespoke = [r["kind"] for r in rows if r["telos"]]
+    L.append("\n  bespoke voice — deep + its own situational pools (the exemplars):")
+    L.append("    " + ", ".join(bespoke))
 
-    inv = inventory()
-    L.append(f"\n{inv['lines']} claimable lines · {inv['claimed']} claimed · "
-             f"{inv['free']} free ({100 * inv['free'] // max(1, inv['lines'])}%)")
+    L.append("\nedit the pools in style.py; the votes/claims in correlator.py; rerun me.")
     return "\n".join(L)
 
 
